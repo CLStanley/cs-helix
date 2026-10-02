@@ -17,7 +17,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "F" => find_prev_char,
         "r" => replace,
         "R" => replace_with_yanked,
-        "A-." =>  repeat_last_motion,
+        "A-." => repeat_last_motion,
 
         "~" => switch_case,
         "`" => switch_to_lowercase,
@@ -36,28 +36,42 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
 
         "v" => select_mode,
         "G" => goto_line,
-        "g" => { "Goto"
-            "g" => goto_file_start,
-            "|" => goto_column,
-            "e" => goto_last_line,
-            "f" => goto_file,
-            "h" => goto_line_start,
-            "l" => goto_line_end,
-            "s" => goto_first_nonwhitespace,
+        "g" => { "Go"
+            "s" => { "Start of"
+                "l" => goto_line_start,
+                "d" => goto_file_start,
+            },
+            "e" => { "End of"
+                "l" => goto_line_end,
+                "d" => goto_last_line,
+            },
+            "n" => { "Next"
+                "d" => goto_next_diag,
+                "f" => goto_next_function,
+                "c" => goto_next_class,
+                "s" => goto_next_paragraph,
+                "m" => goto_next_change,
+            },
+            "N" => { "Previous"
+                "d" => goto_prev_diag,
+                "f" => goto_prev_function,
+                "c" => goto_prev_class,
+                "s" => goto_prev_paragraph,
+                "m" => goto_prev_change,
+            },
             "d" => goto_definition,
             "D" => goto_declaration,
-            "y" => goto_type_definition,
-            "r" => goto_reference,
             "i" => goto_implementation,
-            "t" => goto_window_top,
-            "c" => goto_window_center,
-            "b" => goto_window_bottom,
+            "t" => goto_type_definition,
+            "p" => match_brackets,
+
+            // Preserve useful Helix goto capabilities that do not yet have
+            // Enzyme-native spellings. Dogfooding will decide their final homes.
+            "|" => goto_column,
+            "f" => goto_file,
+            "r" => goto_reference,
             "a" => goto_last_accessed_file,
             "m" => goto_last_modified_file,
-            "n" => goto_next_buffer,
-            "p" => goto_previous_buffer,
-            "k" => move_line_up,
-            "j" => move_line_down,
             "." => goto_last_modification,
             "w" => goto_word,
         },
@@ -77,7 +91,6 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
 
         "C" => copy_selection_on_next_line,
         "A-C" => copy_selection_on_prev_line,
-
 
         "s" => select_regex,
         "A-s" => split_selection_on_newline,
@@ -152,9 +165,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "A-U" => later,
 
         "y" => yank,
-        // yank_all
         "p" => paste_after,
-        // paste_all
         "P" => paste_before,
 
         "Q" => record_macro,
@@ -170,9 +181,6 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
 
         "," => keep_primary_selection,
         "A-," => remove_primary_selection,
-
-        // "q" => record_macro,
-        // "Q" => replay_macro,
 
         "&" => align_selections,
         "_" => trim_selections,
@@ -213,12 +221,9 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
             },
         },
 
-        // move under <space>c
         "C-c" => toggle_comments,
 
-        // z family for save/restore/combine from/to sels from register
-
-        "C-i" | "tab" => jump_forward, // tab == <C-i>
+        "C-i" | "tab" => jump_forward,
         "C-o" => jump_backward,
         "C-s" => save_selection,
 
@@ -252,7 +257,6 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
                 "s" => { "Switch"
                     "t" => dap_switch_thread,
                     "f" => dap_switch_stack_frame,
-                    // sl, sb
                 },
                 "e" => dap_enable_exceptions,
                 "E" => dap_disable_exceptions,
@@ -304,7 +308,6 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
             "C-f" | "pagedown" => page_down,
             "C-u" | "backspace" => page_cursor_half_up,
             "C-d" | "space" => page_cursor_half_down,
-
             "/" => search,
             "?" => rsearch,
             "n" => search_next,
@@ -321,7 +324,6 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
             "C-f" | "pagedown" => page_down,
             "C-u" | "backspace" => page_cursor_half_up,
             "C-d" | "space" => page_cursor_half_down,
-
             "/" => search,
             "?" => rsearch,
             "n" => search_next,
@@ -369,13 +371,19 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "esc" => exit_select_mode,
 
         "v" => normal_mode,
-        "g" => { "Goto"
-            "g" => extend_to_file_start,
+        "g" => { "Go"
+            "s" => { "Start of"
+                "l" => extend_to_line_start,
+                "d" => extend_to_file_start,
+            },
+            "e" => { "End of"
+                "l" => extend_to_line_end,
+                "d" => extend_to_last_line,
+            },
+            "w" => extend_to_word,
             "|" => extend_to_column,
-            "e" => extend_to_last_line,
             "k" => extend_line_up,
             "j" => extend_line_down,
-            "w" => extend_to_word,
         },
     }));
     let insert = keymap!({ "Insert mode"
