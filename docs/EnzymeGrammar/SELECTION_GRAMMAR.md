@@ -19,15 +19,11 @@ Primer preserves Helix's first-class selection model. Enzyme changes the vocabul
 
 ## Core selection rule
 
-Enzyme selection has one general relationship rule:
-
 > **`s + object` selects the whole object. `s + i + object` selects the contents inside that object.**
 
 The whole-object form includes the object's boundaries when the object has meaningful boundaries. The `i` modifier removes those boundaries and selects the contents.
 
-This replaces the earlier `inside` / `outside` split. There is no `so...` family: selecting the object itself already means selecting the whole/around object, so an additional `outside` spelling would be redundant.
-
-Primer should only advertise `si<object>` combinations for which the underlying editor can define a useful and reliable inside range.
+There is no `so...` family: selecting the object itself already means selecting the whole/around object. Primer only advertises `si<object>` combinations for which the underlying editor can define a useful and reliable inside range.
 
 ## Core object vocabulary
 
@@ -35,12 +31,18 @@ Primer should only advertise `si<object>` combinations for which the underlying 
 |---|---|---|
 | `l` | line | Whole current line. |
 | `w` | word | Word under/at cursor. |
+| `W` | long word | Whitespace-delimited long word. |
 | `f` | function/method | Language-neutral callable concept. |
-| `c` | class/type | Structural type/class declaration. |
+| `F` | file | Complete contents of the current file/buffer. |
+| `c` | comment | Tree-sitter comment object. |
+| `C` | class/type | Structural type/class declaration. |
 | `b` | structural block | **Tree-sitter/language-defined** block. |
 | `s` | section | Paragraph/logical text section containing the cursor. |
 | `p` | pair | Matching delimiters such as `()`, `[]`, `{}`, quotes, etc. |
-| `d` | document | Whole document. |
+
+Capitalization may distinguish related objects that naturally compete for the same mnemonic: `w/W` is word/long-word, `c/C` is comment/class, and `f/F` is function/file.
+
+Enzyme deliberately uses **file**, not **document**, as its user-facing term for the complete editable contents. Helix may internally represent an open file as a Document; that is an implementation detail. File-wide commands also apply sensibly to unsaved buffers.
 
 Structural objects should use Tree-sitter where practical. Section is Primer's user-facing term for the paragraph-like text unit traditionally called a paragraph by modal editors.
 
@@ -48,19 +50,7 @@ Structural objects should use Tree-sitter where practical. Section is Primer's u
 
 A **block** is a semantic/syntactic object defined by the language's Tree-sitter support. Primer should not redefine a block as "whatever is inside braces." Different languages may recognize different structures as blocks.
 
-A **pair** is a matching-delimiter relationship that is useful even when the user does not yet understand a language's structural grammar:
-
-```text
-( ... )
-[ ... ]
-{ ... }
-" ... "
-' ... '
-```
-
-A brace-delimited construct may happen to be both a Tree-sitter block and a pair, but those are separate concepts.
-
-This distinction provides a deliberate fallback for unfamiliar languages. A user who does not yet know what that language considers a block can still operate on visually recognizable matching pairs until they learn the language's structural objects.
+A **pair** is a matching-delimiter relationship that remains useful even when the user does not yet understand a language's structural grammar. A brace-delimited construct may happen to be both a Tree-sitter block and a pair, but those are separate concepts.
 
 ## Direct object selection
 
@@ -68,16 +58,39 @@ This distinction provides a deliberate fallback for unfamiliar languages. A user
 |---|---|
 | `sl` | select line |
 | `sw` | select word |
+| `sW` | select long word |
 | `sf` | select current function/method |
-| `sc` | select current class/type |
+| `sF` | select whole file |
+| `sc` | select current comment |
+| `sC` | select current class/type |
 | `sb` | select current Tree-sitter structural block |
 | `ss` | select current section |
 | `sp` | select surrounding pair, including delimiters |
-| `sd` | select whole document |
 
 These acquire the containing/current object directly. They are for the thought "select this thing," rather than "start selecting while I move."
 
-`sd` is Enzyme's select-all spelling. `d` already means document in Navigation (`gsd`, `ged`, etc.), so `sd` follows the grammar without introducing a separate `all` concept. The `s` namespace also makes it less likely to trigger accidentally than a single immediate select-all key.
+`sF` is Enzyme's select-all spelling. `F` means file throughout the object grammar, so the command reads directly as **select file** and is deliberately harder to trigger accidentally than a single immediate select-all key.
+
+## Comment selection and comment actions
+
+Comments are first-class Enzyme objects:
+
+```text
+sc     select current comment
+sic    select inside current comment
+```
+
+Primer delegates both forms to Helix's Tree-sitter comment text objects. `sc` uses the language's `comment.around` range where available; `sic` uses `comment.inside`. This lets each language define comment boundaries rather than teaching Enzyme its own collection of `//`, `/* */`, `#`, and other delimiters.
+
+Comment **selection** and comment **toggling** are separate concepts. `c` in an object slot means comment, while `Ctrl-C` remains the direct toggle-comment action. Leader comment actions remain available as well.
+
+That permits compositional workflows such as:
+
+```text
+sl → Ctrl-C     select line → toggle comment
+sf → Ctrl-C     select function → toggle comment
+s2l → Ctrl-C    select two lines → toggle comment
+```
 
 ## Inside selection
 
@@ -91,12 +104,13 @@ Established examples:
 
 | Key | Meaning |
 |---|---|
+| `sic` | select inside current comment using Tree-sitter's comment-inside range |
 | `sip` | select inside surrounding pair, excluding delimiters |
-| `sib` | select inside current Tree-sitter block, excluding its structural boundaries when Helix/Tree-sitter can define that range reliably |
+| `sib` | select inside current Tree-sitter block when a reliable inside range exists |
 
-The same rule can extend naturally to other objects (`sif`, `sic`, `sis`, etc.) only when Helix/Tree-sitter supplies a meaningful distinction between the whole object and its contents. Primer should not invent arbitrary inside semantics merely to make the grammar exhaustive.
+The same rule can extend naturally to other objects only when Helix/Tree-sitter supplies a meaningful distinction between the whole object and its contents. Primer should not invent arbitrary inside semantics merely to make the grammar exhaustive.
 
-For pairs, the intended behavior is explicit:
+For pairs:
 
 ```text
 foo(alpha, beta)
@@ -105,6 +119,24 @@ foo(alpha, beta)
 ```
 
 Pair selection must use matching-pair semantics rather than treating a pair as a Tree-sitter block.
+
+## Counts
+
+Counts compose inside the Enzyme sentence. For selection, the count includes the current object and produces one contiguous selection:
+
+```text
+sw      current word
+s2w     current word + next word
+s3w     current word + next two words
+
+sW      current long word
+s2W     current + next long word
+
+sl      current line
+s2l     current + next line
+```
+
+The count is a repeat/object count, not an argument. This is distinct from navigation such as `gl225`, where `225` is an absolute line-number argument.
 
 ## Canceling an accidental/transient selection
 
@@ -117,21 +149,9 @@ u           undo an actual edit
 ;           collapse the current selection at its active position
 ```
 
-For an Enzyme object selection, Backspace should restore the selection/cursor state that existed immediately before the transient selection operation when that state is available.
+For an Enzyme object selection, Backspace restores the selection/cursor state that existed immediately before the transient selection operation when that state is available. In interactive Select mode, Backspace abandons the current interactive range, returns to its anchor, and exits to Normal mode.
 
-Example:
-
-```text
-cursor inside a function
-sf
-Backspace
-```
-
-The function selection is abandoned and the cursor returns to its pre-`sf` position.
-
-Backspace is **not** an editing undo mechanism. Once an action has changed the document, `u` remains the way to undo that edit.
-
-Esc must not acquire hidden "rewind all Select-mode navigation" semantics. In Select/Visual mode, Esc continues to mean leave the mode according to Primer's modal rules.
+Backspace is **not** an editing undo mechanism. Once an action has changed the file, `u` remains the way to undo that edit.
 
 ## Interactive Select/Visual mode
 
@@ -141,15 +161,9 @@ v    enter Select/Visual mode
 
 Select/Visual mode supplies the selection intent implicitly. Therefore Enzyme does **not** add a redundant `se... = select → extend...` family.
 
-Compatible motions retain their normal spelling but extend the active selection. The general rule is:
-
 > **In Select/Visual mode, a compatible movement/navigation sentence extends the selection to the destination described by that sentence.**
 
-The grammar is therefore learned once. Primer should not maintain a second parallel set of extension mnemonics when mode context already supplies the verb.
-
-Not every Navigation command can sensibly extend a contiguous selection. Structural and local motions generally can; cross-document semantic jumps may not. Primer should preserve useful Helix behavior where possible, but must not pretend a cross-buffer range exists when the underlying editor cannot represent one.
-
-`Esc` exits Select/Visual mode toward the safe normal state. It does not rewind all movement performed while Select mode was active.
+The grammar is therefore learned once. Not every Navigation command can sensibly extend a contiguous selection; cross-file semantic jumps may not. Primer preserves useful Helix behavior where possible without pretending impossible cross-buffer ranges exist.
 
 ## Multiple-selection grammar
 
@@ -195,9 +209,9 @@ sxm    split selection by matches...
 
 ## Advanced selection-set controls
 
-Enzyme lowers the learning curve; it does not attempt to eliminate learning. Core navigation and selection should be predictable from a small vocabulary. Specialized controls may still require learning and reference, just as advanced features in a conventional editor do.
+Enzyme lowers the learning curve; it does not attempt to eliminate learning. Specialized controls may still require learning and reference.
 
-Primer therefore intentionally preserves these concise Helix controls rather than inventing a longer Enzyme namespace for them:
+Primer intentionally preserves these concise Helix controls rather than inventing a longer Enzyme namespace:
 
 ```text
 (       rotate selections backward / change primary backward
@@ -206,10 +220,6 @@ Primer therefore intentionally preserves these concise Helix controls rather tha
 Alt+,   remove the primary selection
 ```
 
-These are niche selection-set management operations, not part of the core object-selection/navigation philosophy. Their existence does not justify complicating the everyday `s` grammar.
-
-The same standard applies during the broader parity audit: **do not remap an advanced Helix capability merely because Enzyme can invent a grammatical spelling for it. Change it when doing so materially lowers the learning curve or resolves a real inconsistency.**
-
 Other advanced Helix selection operations—alignment, selection-direction flipping, rotating selection contents, syntax-tree growth/shrinkage, sibling/parent/child operations, and similar tools—must remain reachable. They may retain sensible Helix bindings unless dogfooding demonstrates a meaningful reason to promote them into Enzyme grammar.
 
 ## Actions after selection
@@ -217,12 +227,12 @@ Other advanced Helix selection operations—alignment, selection-direction flipp
 Selection hands off naturally to direct editing actions:
 
 ```text
-s l d    select line → delete
-s l c    select line → comment
-s w m    select word → modify
-s f y    select function → yank
-s s c    select section → comment
-s i p d  select inside pair → delete
+sl Ctrl-C    select line → toggle comment
+sw m         select word → modify
+sf y         select function → yank
+sic d        select inside comment → delete
+sip d        select inside pair → delete
+sF y         select file → yank
 ```
 
 Editing actions operate across all active selections where supported.
@@ -236,12 +246,14 @@ SELECT…
 
 l    line
 w    word
+W    long word
 f    function/method
-c    class/type
+F    file
+c    comment
+C    class/type
 b    block (Tree-sitter/language-defined)
 s    section
 p    pair
-d    document
 i    inside…
 a    add selection…
 r    remove selection…
@@ -256,18 +268,20 @@ Select/Visual mode should instead surface compatible motions/navigation because 
 1. `s` means deliberate object-selection grammar.
 2. `v` preserves interactive Select/Visual mode.
 3. `s + object` selects the whole object; `s + i + object` selects inside it when a meaningful inside range exists.
-4. There is no redundant `so...` outside/around family; whole-object selection already supplies that meaning.
-5. `block` is Tree-sitter/language-defined; `pair` is a separate matching-delimiter concept and acts as a predictable fallback in unfamiliar languages.
-6. In Select/Visual mode, compatible navigation extends the selection; do not require a redundant `se` prefix.
-7. Preserve Helix's first-class and multiple-selection model.
-8. Reuse Navigation vocabulary rather than creating a parallel extension vocabulary.
-9. `sd` is select document/select all.
-10. Backspace means cancel the current transient Enzyme operation and restore its pre-operation state when available; Esc remains mode exit/cancel, and `u` remains editing undo.
-11. `n/N` retain next/previous meaning inside selection-set operations.
-12. Prefer the strongest mnemonic for common/core operations; rarer advanced controls may retain concise established bindings.
-13. Primer must account for existing Helix motion/selection capabilities through an explicit parity audit before Enzyme v1 is declared complete.
-14. Enzyme lowers the learning curve rather than eliminating learning. Advanced operations may require learning/reference even when the core grammar is highly predictable.
-15. Do not invent bindings merely to make the grammar exhaustive; preserve sensible conventions when they already satisfy Primer's philosophy.
+4. There is no redundant `so...` outside/around family.
+5. `block` is Tree-sitter/language-defined; `pair` is a separate matching-delimiter concept.
+6. `c` means comment and `C` means class/type in object slots.
+7. `f` means function and `F` means file in object slots.
+8. Enzyme uses **file** rather than **document** as user-facing terminology for the complete editable contents.
+9. In Select/Visual mode, compatible navigation extends the selection; do not require a redundant `se` prefix.
+10. Preserve Helix's first-class and multiple-selection model.
+11. Reuse Navigation vocabulary rather than creating a parallel extension vocabulary.
+12. `sF` is select file/select all.
+13. Backspace means cancel the current transient Enzyme operation; Esc remains mode exit/cancel, and `u` remains editing undo.
+14. `n/N` retain next/previous meaning inside selection-set operations.
+15. Prefer the strongest mnemonic for common/core operations; rarer advanced controls may retain concise established bindings.
+16. Primer must account for existing Helix motion/selection capabilities through an explicit parity audit before Enzyme v1 is declared complete.
+17. Do not invent bindings merely to make the grammar exhaustive; preserve sensible conventions when they already satisfy Primer's philosophy.
 
 ## Selection v1 implementation checklist
 
@@ -281,10 +295,9 @@ Before Enzyme v1 is frozen, Primer still needs:
 
 - implementation verification for `sp` / `sip` using true matching-pair semantics;
 - implementation verification for `sb` / `sib` using Tree-sitter-defined block semantics;
-- Backspace transient-selection cancellation/restoration;
+- implementation verification for `sc` / `sic` across languages with comment text-object queries;
+- Backspace transient-selection cancellation/restoration verification;
 - Select/Visual-mode navigation parity for compatible Enzyme motions;
 - a Helix parity audit to ensure advanced capabilities remain reachable without automatically remapping them;
 - verification of regex selection/filter/split behavior for the common Enzyme multiple-selection grammar;
-- verification of commands whose Helix behavior cannot sensibly map to a contiguous selection across buffers/documents.
-
-After that audit, only actual uncovered capabilities that materially benefit from Enzyme grammar should receive new grammar decisions.
+- verification of commands whose Helix behavior cannot sensibly map to a contiguous selection across buffers/files.
