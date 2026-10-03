@@ -25,14 +25,12 @@ Enzyme should improve discoverability without turning movement into full sentenc
 g s [object]    go to start of current object
 g e [object]    go to end of current object
 g n [object]    go to next object
-g p [object]    go to previous object
+g N [object]    go to previous object
 ```
 
-Within a directional grammar slot, `n` means **next** and `p` means **previous**. Capitalization is not required merely to reverse direction. This replaces the earlier `n/N` directional grammar for structural navigation.
+Within directional grammar, lowercase `n` means **next** and uppercase `N` means **previous**. This deliberately mirrors the established search-repeat relationship (`n` next, `N` previous) and avoids consuming another object/purpose letter merely to express reverse direction.
 
-Capitalization remains meaningful where it changes the kind of object or operation, such as `w` versus `W`; it is not used merely as a hidden direction modifier.
-
-Bare search-repeat controls are an intentional exception: `n` remains next search result and `N` remains previous search result because bare `p` is the established paste command. Enzyme directional sentences use `n/p`; preserved advanced/native controls may retain their established spelling where changing them would create a worse conflict.
+Capitalization therefore has two legitimate Enzyme roles when the distinction is already useful and learnable: it may reverse an established directional pair (`n/N`), or distinguish an established object kind (`w/W`). Enzyme should not introduce capitalization arbitrarily, but it also should not reject a compact convention that removes grammar conflicts.
 
 ## Immediate and conventional navigation
 
@@ -69,13 +67,13 @@ These remain because they are compact conventions and their behavior can be taug
 | `gsw` / `gew` | start / end word boundary |
 | `gsW` / `geW` | start / end long-word boundary |
 | `gsf` / `gef` | start / end of current function or method |
-| `gnf` / `gpf` | next / previous function or method |
+| `gnf` / `gNf` | next / previous function or method |
 | `gsc` / `gec` | start / end of current class/type |
-| `gnc` / `gpc` | next / previous class/type |
+| `gnc` / `gNc` | next / previous class/type |
 | `gsb` / `geb` | start / end of current structural block |
-| `gnb` / `gpb` | next / previous structural block |
+| `gnb` / `gNb` | next / previous structural block |
 | `gss` / `ges` | start / end of current section |
-| `gns` / `gps` | next / previous section |
+| `gns` / `gNs` | next / previous section |
 
 A **section** is Primer's user-facing term for the paragraph-like logical text unit traditionally called a paragraph by modal editors.
 
@@ -116,13 +114,13 @@ These are short, mnemonic semantic destinations. Primer preserves strong Helix/V
 
 ```text
 gnd    next diagnostic
-gpd    previous diagnostic
+gNd    previous diagnostic
 
 gnm    next editor modification/change
-gpm    previous editor modification/change
+gNm    previous editor modification/change
 
 gnh    next/forward location in navigation history
-gph    previous/back location in navigation history
+gNh    previous/back location in navigation history
 ```
 
 Repository/VCS changes remain in the Leader/Git family rather than being conflated with editor modification history.
@@ -132,14 +130,14 @@ Repository/VCS changes remain in the Leader/Git family rather than being conflat
 ```text
 gp     go to matching counterpart of the current recognized pair
 gnp    go to next recognized pair
-gpp    go to previous recognized pair
+gNp    go to previous recognized pair
 ```
 
-The apparent reuse of `gp` is grammatical rather than ambiguous: as a complete command, `gp` means **matching pair**; when another object key follows a directional prefix, `p` occupies the **previous** direction slot. Thus `gnp` reads “go next pair” and `gpp` reads “go previous pair.”
+`gp` remains a complete, dedicated command for bouncing between the two sides of the currently addressed pair. It is not a directional prefix. The `n/N` directional grammar therefore leaves pair matching conflict-free: `gnp` reads “go next pair,” while `gNp` reads “go previous pair.”
 
 Recognized pairs include syntax-aware braces, brackets, parentheses, quotations/apostrophes where parser context supports them, and other language-aware paired constructs that can be identified reliably.
 
-`gnp` and `gpp` traverse recognized pair starts in deterministic document order; `gp` crosses the currently addressed pair. Primer should prefer a smaller trustworthy parser-aware pair set over false-positive punctuation heuristics.
+`gnp` and `gNp` traverse recognized pair starts in deterministic document order; `gp` crosses the currently addressed pair. Primer should prefer a smaller trustworthy parser-aware pair set over false-positive punctuation heuristics.
 
 Pair vocabulary is reused by Selection under the general whole/inside rule:
 
@@ -191,7 +189,7 @@ v → l      extend right
 v → w      extend by word
 v → gsf    extend toward start of current function
 v → gnf    extend toward next function
-v → gpf    extend toward previous function
+v → gNf    extend toward previous function
 ```
 
 Cross-buffer semantic jumps need not pretend to create impossible contiguous selections; preserve sensible Helix behavior in those cases.
@@ -207,9 +205,10 @@ s    start of…
 e    end of…
 m    middle of…
 n    next…
-p    previous…
+N    previous…
 l    line number…
 0    column zero
+p    matching pair
 d    definition
 D    declaration
 i    implementation
@@ -221,7 +220,7 @@ Pair navigation should remain discoverable as:
 ```text
 gp     matching pair
 gnp    next pair
-gpp    previous pair
+gNp    previous pair
 ```
 
 Examples:
@@ -230,10 +229,10 @@ Examples:
 gsf    go start function
 gef    go end function
 gnf    go next function
-gpf    go previous function
+gNf    go previous function
 
 gnc    go next class
-gpc    go previous class
+gNc    go previous class
 ```
 
 A user who learns the relationship vocabulary should be able to predict the class/block/section/pair equivalents.
@@ -244,9 +243,9 @@ Counts compose with the directional grammar without changing the meaning of the 
 
 ```text
 g3nf    third next function
-g2pf    second previous function
+g2Nf    second previous function
 g2nc    second next class
-g2pc    second previous class
+g2Nc    second previous class
 ```
 
 The number is a repeat/count modifier. This is distinct from `gl225`, where `225` is the absolute line-number argument.
@@ -255,16 +254,15 @@ The number is a repeat/count modifier. This is distinct from `gl225`, where `225
 
 1. Preserve sensible existing conventions instead of renaming them for novelty.
 2. `g` means deliberate Go/navigation grammar.
-3. `s/e` mean start/end; within directional grammar `n/p` mean next/previous.
-4. Do not require capitalization merely to reverse direction.
-5. Capitalization may remain meaningful when it changes the object/operation itself, such as `w/W`.
+3. `s/e` mean start/end; within directional grammar `n/N` mean next/previous.
+4. `gp` remains the dedicated matching-pair command; it is not overloaded as a previous-direction prefix.
+5. Capitalization may carry an established compact distinction such as `n/N` direction or `w/W` object kind, but should not be introduced arbitrarily.
 6. Prefer Tree-sitter for structural objects and LSP for semantic destinations.
 7. `block` is Tree-sitter/language-defined; matching `pair` is a separate fallback concept.
-8. Grammatical position may disambiguate reused letters such as `p`.
-9. `z/Z` own viewport manipulation; `g` owns describable destinations.
-10. Advanced Helix capabilities remain reachable even when they do not receive Enzyme-native names in v1.
-11. Select/Visual mode reuses compatible navigation rather than duplicating motion vocabulary.
-12. Enzyme lowers the learning curve rather than eliminating learning; specialized advanced controls may remain concise native Helix bindings when remapping them adds little practical discoverability.
-13. Dogfooding Primer in Primer determines which preserved advanced operations deserve future Enzyme grammar.
-14. `gsl` targets the first non-whitespace character; `g0` explicitly targets literal column zero.
-15. `gl<number>` accepts an absolute line-number argument and is distinct from repeat/count syntax.
+8. `z/Z` own viewport manipulation; `g` owns describable destinations.
+9. Advanced Helix capabilities remain reachable even when they do not receive Enzyme-native names in v1.
+10. Select/Visual mode reuses compatible navigation rather than duplicating motion vocabulary.
+11. Enzyme lowers the learning curve rather than eliminating learning; specialized advanced controls may remain concise native Helix bindings when remapping them adds little practical discoverability.
+12. Dogfooding Primer in Primer determines which preserved advanced operations deserve future Enzyme grammar.
+13. `gsl` targets the first non-whitespace character; `g0` explicitly targets literal column zero.
+14. `gl<number>` accepts an absolute line-number argument and is distinct from repeat/count syntax.
