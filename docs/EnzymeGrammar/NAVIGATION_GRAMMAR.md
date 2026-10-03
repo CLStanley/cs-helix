@@ -70,7 +70,11 @@ These remain because they are compact conventions and their behavior can be taug
 | `gss` / `ges` | start / end of current section |
 | `gns` / `gNs` | next / previous section |
 
-A **section** is Primer's user-facing term for the paragraph-like logical text unit traditionally called a paragraph by modal editors. Structural objects should use Tree-sitter where practical.
+A **section** is Primer's user-facing term for the paragraph-like logical text unit traditionally called a paragraph by modal editors.
+
+A **block** is a semantic/syntactic object defined by the current language's Tree-sitter support. Primer must not redefine `block` as merely a brace pair. This means block behavior may legitimately differ between languages as their grammars differ.
+
+Matching **pairs** are a separate, deliberately simpler concept. Pair operations provide a predictable fallback when working in an unfamiliar language: even before the user understands what that language considers a structural block, visually recognizable delimiters can still be addressed through pair navigation/selection.
 
 `gmd` is an absolute document destination. Viewport-relative movement belongs to View mode instead.
 
@@ -111,12 +115,14 @@ Recognized pairs include syntax-aware braces, brackets, parentheses, quotations/
 
 `gP` advances through recognized pair starts in deterministic document order; `gp` crosses the addressed pair. Primer should prefer a smaller trustworthy parser-aware pair set over false-positive punctuation heuristics.
 
-Pair vocabulary is reused by Selection:
+Pair vocabulary is reused by Selection under the general whole/inside rule:
 
 ```text
-sip    select inside pair
-sop    select outside/around pair
+sp     select surrounding pair including delimiters
+sip    select inside surrounding pair excluding delimiters
 ```
+
+There is no separate outside/around selection family: `sp` already means the whole pair.
 
 ## View mode
 
@@ -134,7 +140,13 @@ This is intentionally separate from absolute document destinations such as `gsd/
 
 Primer preserves access to Helix's advanced syntax-tree parent/child/sibling navigation and syntax-aware selection operations for v1 rather than forcing rarely used capabilities into speculative Enzyme vocabulary.
 
-Capability parity matters; renaming every obscure command does not. If these operations become common while developing Primer in Primer, they can receive Enzyme-native grammar later.
+Capability parity matters; renaming every obscure command does not.
+
+> **Enzyme lowers the learning curve; it does not attempt to eliminate learning. Core, frequent operations should follow predictable grammar and be discoverable. Specialized or advanced operations may retain concise established Helix bindings when a grammatical replacement provides little practical benefit.**
+
+The test for an advanced existing binding is not "Can Enzyme invent a sentence for this?" but "Would changing this materially lower the learning curve for normal editing?" If not, preserving the concise existing control is preferable.
+
+Dogfooding Primer in Primer is the mechanism for deciding which preserved advanced operations deserve future Enzyme grammar.
 
 ## Interactive visible-target Jump
 
@@ -195,8 +207,10 @@ A user who learns the relationship vocabulary should be able to predict the clas
 3. `s/e` mean start/end; `n/N` mean next/previous.
 4. Do not encode previous/current/next by changing capitalization in the middle of a sentence.
 5. Prefer Tree-sitter for structural objects and LSP for semantic destinations.
-6. Grammatical position may disambiguate reused letters.
-7. `z/Z` own viewport manipulation; `g` owns describable destinations.
-8. Advanced Helix capabilities remain reachable even when they do not receive Enzyme-native names in v1.
-9. Select/Visual mode reuses compatible navigation rather than duplicating motion vocabulary.
-10. Dogfooding Primer in Primer is the mechanism for deciding which preserved advanced operations deserve future Enzyme grammar.
+6. `block` is Tree-sitter/language-defined; matching `pair` is a separate fallback concept.
+7. Grammatical position may disambiguate reused letters.
+8. `z/Z` own viewport manipulation; `g` owns describable destinations.
+9. Advanced Helix capabilities remain reachable even when they do not receive Enzyme-native names in v1.
+10. Select/Visual mode reuses compatible navigation rather than duplicating motion vocabulary.
+11. Enzyme lowers the learning curve rather than eliminating learning; specialized advanced controls may remain concise native Helix bindings when remapping them adds little practical discoverability.
+12. Dogfooding Primer in Primer determines which preserved advanced operations deserve future Enzyme grammar.
