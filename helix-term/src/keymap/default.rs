@@ -94,7 +94,27 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "C" => copy_selection_on_next_line,
         "A-C" => copy_selection_on_prev_line,
 
-        "s" => select_regex,
+        // Enzyme selection grammar. Structural selections reuse Helix's own
+        // text-object engine through thin adapters in keymap/enzyme.rs.
+        "s" => { "Select"
+            "l" => enzyme_select_line,
+            "w" => enzyme_select_word,
+            "f" => enzyme_select_function,
+            "c" => enzyme_select_class,
+            "s" => enzyme_select_section,
+            "b" => enzyme_select_block,
+            "d" => enzyme_select_document,
+            "x" => { "Split selection"
+                "l" => split_selection_on_newline,
+                "m" => split_selection,
+            },
+            "i" => { "Inside"
+                "p" => enzyme_select_inside_pair,
+            },
+            "o" => { "Outside / around"
+                "p" => enzyme_select_outside_pair,
+            },
+        },
         "A-s" => split_selection_on_newline,
         "A-minus" => merge_selections,
         "A-_" => merge_consecutive_selections,
@@ -354,7 +374,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "b" => extend_prev_word_start,
         "e" => extend_next_word_end,
         "W" => extend_next_long_word_start,
-        "B" => extend_prev_long_word_start,
+        "B" => extend_prev_word_start,
         "E" => extend_next_long_word_end,
 
         "A-e" => extend_parent_node_end,
