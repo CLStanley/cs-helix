@@ -47,8 +47,6 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
             },
             "n" => { "Next"
                 "d" => goto_next_diag,
-                // Helix's Tree-sitter object motions select the object. In Normal
-                // mode Enzyme navigation collapses that range back to its start.
                 "f" => enzyme_goto_next_function,
                 "c" => enzyme_goto_next_class,
                 "s" => enzyme_goto_next_section,
@@ -66,9 +64,6 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
             "i" => goto_implementation,
             "t" => goto_type_definition,
             "p" => match_brackets,
-
-            // Preserve useful Helix goto capabilities that do not yet have
-            // Enzyme-native spellings. Dogfooding will decide their final homes.
             "|" => goto_column,
             "f" => goto_file,
             "r" => goto_reference,
@@ -90,12 +85,9 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "A-d" => delete_selection_noyank,
         "c" => change_selection,
         "A-c" => change_selection_noyank,
-
         "C" => copy_selection_on_next_line,
         "A-C" => copy_selection_on_prev_line,
 
-        // Enzyme selection grammar. Structural selections reuse Helix's own
-        // text-object engine through thin adapters in keymap/enzyme.rs.
         "s" => { "Select"
             "l" => enzyme_select_line,
             "w" => enzyme_select_word,
@@ -103,6 +95,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
             "c" => enzyme_select_class,
             "s" => enzyme_select_section,
             "b" => enzyme_select_block,
+            "p" => enzyme_select_pair,
             "d" => enzyme_select_document,
             "x" => { "Split selection"
                 "l" => split_selection_on_newline,
@@ -110,9 +103,6 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
             },
             "i" => { "Inside"
                 "p" => enzyme_select_inside_pair,
-            },
-            "o" => { "Outside / around"
-                "p" => enzyme_select_outside_pair,
             },
         },
         "A-s" => split_selection_on_newline,
@@ -203,15 +193,12 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
 
         "," => keep_primary_selection,
         "A-," => remove_primary_selection,
-
         "&" => align_selections,
         "_" => trim_selections,
-
         "(" => rotate_selections_backward,
         ")" => rotate_selections_forward,
         "A-(" => rotate_selection_contents_backward,
         "A-)" => rotate_selection_contents_forward,
-
         "A-:" => ensure_selections_forward,
 
         "esc" => normal_mode,
@@ -244,7 +231,6 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         },
 
         "C-c" => toggle_comments,
-
         "C-i" | "tab" => jump_forward,
         "C-o" => jump_backward,
         "C-s" => save_selection,
@@ -359,39 +345,33 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "A-!" => shell_append_output,
         "$" => shell_keep_pipe,
         "C-z" => suspend,
-
         "C-a" => increment,
         "C-x" => decrement,
     });
+
     let mut select = normal.clone();
     select.merge_nodes(keymap!({ "Select mode"
         "h" | "left" => extend_char_left,
         "j" | "down" => extend_visual_line_down,
         "k" | "up" => extend_visual_line_up,
         "l" | "right" => extend_char_right,
-
         "w" => extend_next_word_start,
         "b" => extend_prev_word_start,
         "e" => extend_next_word_end,
         "W" => extend_next_long_word_start,
         "B" => extend_prev_word_start,
         "E" => extend_next_long_word_end,
-
         "A-e" => extend_parent_node_end,
         "A-b" => extend_parent_node_start,
-
         "n" => extend_search_next,
         "N" => extend_search_prev,
-
         "t" => extend_till_char,
         "f" => extend_next_char,
         "T" => extend_till_prev_char,
         "F" => extend_prev_char,
-
         "home" => extend_to_line_start,
         "end" => extend_to_line_end,
         "esc" => exit_select_mode,
-
         "v" => normal_mode,
         "g" => { "Go"
             "s" => { "Start of"
@@ -402,30 +382,33 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
                 "l" => extend_to_line_end,
                 "d" => extend_to_last_line,
             },
-            // Keep Helix's structural range behavior in Select mode for now.
-            // A dedicated Enzyme structural motion will later make these land on
-            // the exact same destination as Normal mode while preserving anchor.
             "n" => { "Next"
-                "f" => goto_next_function,
-                "c" => goto_next_class,
+                "d" => goto_next_diag,
+                "f" => enzyme_goto_next_function,
+                "c" => enzyme_goto_next_class,
+                "s" => enzyme_goto_next_section,
+                "m" => goto_next_change,
             },
             "N" => { "Previous"
-                "f" => goto_prev_function,
-                "c" => goto_prev_class,
+                "d" => goto_prev_diag,
+                "f" => enzyme_goto_previous_function,
+                "c" => enzyme_goto_previous_class,
+                "s" => enzyme_goto_previous_section,
+                "m" => goto_prev_change,
             },
+            "p" => match_brackets,
             "w" => extend_to_word,
             "|" => extend_to_column,
             "k" => extend_line_up,
             "j" => extend_line_down,
         },
     }));
+
     let insert = keymap!({ "Insert mode"
         "esc" => normal_mode,
-
         "C-s" => commit_undo_checkpoint,
         "C-x" => completion,
         "C-r" => insert_register,
-
         "C-w" | "A-backspace" => delete_word_backward,
         "A-d" | "A-del" => delete_word_forward,
         "C-u" => kill_to_line_start,
@@ -435,7 +418,6 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "C-j" | "ret" => insert_newline,
         "tab" => smart_tab,
         "S-tab" => insert_tab,
-
         "up" => move_visual_line_up,
         "down" => move_visual_line_down,
         "left" => move_char_left,
@@ -445,9 +427,5 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "home" => goto_line_start,
         "end" => goto_line_end_newline,
     });
-    hashmap!(
-        Mode::Normal => normal,
-        Mode::Select => select,
-        Mode::Insert => insert,
-    )
+    hashmap!(Mode::Normal => normal, Mode::Select => select, Mode::Insert => insert)
 }
