@@ -47,15 +47,17 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
             },
             "n" => { "Next"
                 "d" => goto_next_diag,
-                "f" => goto_next_function,
-                "c" => goto_next_class,
+                // Helix's Tree-sitter object motions select the object. In Normal
+                // mode Enzyme navigation collapses that range back to its start.
+                "f" => [goto_next_function, move_parent_node_start],
+                "c" => [goto_next_class, move_parent_node_start],
                 "s" => goto_next_paragraph,
                 "m" => goto_next_change,
             },
             "N" => { "Previous"
                 "d" => goto_prev_diag,
-                "f" => goto_prev_function,
-                "c" => goto_prev_class,
+                "f" => [goto_prev_function, move_parent_node_start],
+                "c" => [goto_prev_class, move_parent_node_start],
                 "s" => goto_prev_paragraph,
                 "m" => goto_prev_change,
             },
@@ -379,6 +381,17 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
             "e" => { "End of"
                 "l" => extend_to_line_end,
                 "d" => extend_to_last_line,
+            },
+            // Keep Helix's structural range behavior in Select mode for now.
+            // A dedicated Enzyme structural motion will later make these land on
+            // the exact same destination as Normal mode while preserving anchor.
+            "n" => { "Next"
+                "f" => goto_next_function,
+                "c" => goto_next_class,
+            },
+            "N" => { "Previous"
+                "f" => goto_prev_function,
+                "c" => goto_prev_class,
             },
             "w" => extend_to_word,
             "|" => extend_to_column,
