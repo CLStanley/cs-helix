@@ -75,6 +75,8 @@ fn motion_head(range: Range) -> usize { range.head }
 
 fn enzyme_goto_next_function(cx: &mut Context) { navigate_without_selecting(cx, MappableCommand::goto_next_function, structural_start); }
 fn enzyme_goto_previous_function(cx: &mut Context) { navigate_without_selecting(cx, MappableCommand::goto_prev_function, structural_start); }
+fn enzyme_goto_next_comment(cx: &mut Context) { navigate_without_selecting(cx, MappableCommand::goto_next_comment, structural_start); }
+fn enzyme_goto_previous_comment(cx: &mut Context) { navigate_without_selecting(cx, MappableCommand::goto_prev_comment, structural_start); }
 fn enzyme_goto_next_class(cx: &mut Context) { navigate_without_selecting(cx, MappableCommand::goto_next_class, structural_start); }
 fn enzyme_goto_previous_class(cx: &mut Context) { navigate_without_selecting(cx, MappableCommand::goto_prev_class, structural_start); }
 fn enzyme_goto_next_section(cx: &mut Context) { navigate_without_selecting(cx, MappableCommand::goto_next_paragraph, motion_head); }
@@ -122,7 +124,7 @@ fn select_helix_textobject(cx: &mut Context, around: bool, object_key: char) {
 }
 
 /// Reuse Helix's text-object query, then collapse it to a structural boundary.
-/// This keeps Primer from maintaining a second definition of a function/class.
+/// This keeps Primer from maintaining a second definition of syntax objects.
 fn goto_textobject_boundary(cx: &mut Context, object_key: char, start: bool) {
     let mode = cx.editor.mode;
     let before = {
@@ -147,6 +149,8 @@ fn goto_textobject_boundary(cx: &mut Context, object_key: char, start: bool) {
 
 fn enzyme_goto_function_start(cx: &mut Context) { goto_textobject_boundary(cx, 'f', true); }
 fn enzyme_goto_function_end(cx: &mut Context) { goto_textobject_boundary(cx, 'f', false); }
+fn enzyme_goto_comment_start(cx: &mut Context) { goto_textobject_boundary(cx, 'c', true); }
+fn enzyme_goto_comment_end(cx: &mut Context) { goto_textobject_boundary(cx, 'c', false); }
 fn enzyme_goto_class_start(cx: &mut Context) { goto_textobject_boundary(cx, 't', true); }
 fn enzyme_goto_class_end(cx: &mut Context) { goto_textobject_boundary(cx, 't', false); }
 fn enzyme_goto_section_start(cx: &mut Context) { goto_textobject_boundary(cx, 'p', true); }
@@ -154,9 +158,7 @@ fn enzyme_goto_section_end(cx: &mut Context) { goto_textobject_boundary(cx, 'p',
 fn enzyme_goto_block_start(cx: &mut Context) { goto_textobject_boundary(cx, 'm', true); }
 fn enzyme_goto_block_end(cx: &mut Context) { goto_textobject_boundary(cx, 'm', false); }
 
-/// `gl<number>` is an argument-taking command, not a count. Keep collecting
-/// digits until Enter, then temporarily feed that absolute line to Helix's
-/// existing `goto_line` command through its normal count field.
+/// `gl<number>` is an argument-taking command, not a count.
 fn await_line_number(cx: &mut Context, digits: String) {
     cx.editor.set_status(format!("GO TO LINE: {digits}"));
     cx.on_next_key(move |cx, event| match event.code {
@@ -168,12 +170,8 @@ fn await_line_number(cx: &mut Context, digits: String) {
         KeyCode::Backspace => {
             let mut next = digits;
             next.pop();
-            if next.is_empty() {
-                cx.editor.set_status("GO TO LINE: ");
-                await_line_number(cx, next);
-            } else {
-                await_line_number(cx, next);
-            }
+            cx.editor.set_status(format!("GO TO LINE: {next}"));
+            await_line_number(cx, next);
         }
         KeyCode::Enter => {
             if let Ok(line) = digits.parse::<usize>() {
@@ -218,20 +216,22 @@ fn enzyme_select_line(cx: &mut Context) { remember_transient_selection(cx, |cx| 
 fn enzyme_select_word(cx: &mut Context) { remember_transient_selection(cx, |cx| select_helix_textobject(cx, true, 'w')); }
 fn enzyme_select_long_word(cx: &mut Context) { remember_transient_selection(cx, |cx| select_helix_textobject(cx, true, 'W')); }
 fn enzyme_select_function(cx: &mut Context) { remember_transient_selection(cx, |cx| select_helix_textobject(cx, true, 'f')); }
+fn enzyme_select_comment(cx: &mut Context) { remember_transient_selection(cx, |cx| select_helix_textobject(cx, true, 'c')); }
+fn enzyme_select_inside_comment(cx: &mut Context) { remember_transient_selection(cx, |cx| select_helix_textobject(cx, false, 'c')); }
 fn enzyme_select_class(cx: &mut Context) { remember_transient_selection(cx, |cx| select_helix_textobject(cx, true, 't')); }
 fn enzyme_select_section(cx: &mut Context) { remember_transient_selection(cx, |cx| select_helix_textobject(cx, true, 'p')); }
-fn enzyme_select_block(cx: &mut Context) {
-    remember_transient_selection(cx, |cx| select_helix_textobject(cx, true, 'm'));
-}
+fn enzyme_select_block(cx: &mut Context) { remember_transient_selection(cx, |cx| select_helix_textobject(cx, true, 'm')); }
 fn enzyme_select_pair(cx: &mut Context) { remember_transient_selection(cx, |cx| select_pair(cx, textobject::TextObject::Around)); }
 fn enzyme_select_inside_pair(cx: &mut Context) { remember_transient_selection(cx, |cx| select_pair(cx, textobject::TextObject::Inside)); }
-fn enzyme_select_document(cx: &mut Context) { remember_transient_selection(cx, |cx| MappableCommand::select_all.execute(cx)); }
+fn enzyme_select_file(cx: &mut Context) { remember_transient_selection(cx, |cx| MappableCommand::select_all.execute(cx)); }
 
 #[allow(non_upper_case_globals)]
 impl MappableCommand {
     pub const enzyme_cancel_transient_selection: Self = Self::Static { name: "enzyme_cancel_transient_selection", fun: enzyme_cancel_transient_selection, doc: "Cancel current transient Enzyme selection" };
     pub const enzyme_goto_next_function: Self = Self::Static { name: "enzyme_goto_next_function", fun: enzyme_goto_next_function, doc: "Go to next function" };
     pub const enzyme_goto_previous_function: Self = Self::Static { name: "enzyme_goto_previous_function", fun: enzyme_goto_previous_function, doc: "Go to previous function" };
+    pub const enzyme_goto_next_comment: Self = Self::Static { name: "enzyme_goto_next_comment", fun: enzyme_goto_next_comment, doc: "Go to next comment" };
+    pub const enzyme_goto_previous_comment: Self = Self::Static { name: "enzyme_goto_previous_comment", fun: enzyme_goto_previous_comment, doc: "Go to previous comment" };
     pub const enzyme_goto_next_class: Self = Self::Static { name: "enzyme_goto_next_class", fun: enzyme_goto_next_class, doc: "Go to next class/type" };
     pub const enzyme_goto_previous_class: Self = Self::Static { name: "enzyme_goto_previous_class", fun: enzyme_goto_previous_class, doc: "Go to previous class/type" };
     pub const enzyme_goto_next_section: Self = Self::Static { name: "enzyme_goto_next_section", fun: enzyme_goto_next_section, doc: "Go to next section" };
@@ -244,6 +244,8 @@ impl MappableCommand {
     pub const enzyme_goto_long_word_end: Self = Self::Static { name: "enzyme_goto_long_word_end", fun: enzyme_goto_long_word_end, doc: "Go to end of current long word" };
     pub const enzyme_goto_function_start: Self = Self::Static { name: "enzyme_goto_function_start", fun: enzyme_goto_function_start, doc: "Go to start of current function" };
     pub const enzyme_goto_function_end: Self = Self::Static { name: "enzyme_goto_function_end", fun: enzyme_goto_function_end, doc: "Go to end of current function" };
+    pub const enzyme_goto_comment_start: Self = Self::Static { name: "enzyme_goto_comment_start", fun: enzyme_goto_comment_start, doc: "Go to start of current comment" };
+    pub const enzyme_goto_comment_end: Self = Self::Static { name: "enzyme_goto_comment_end", fun: enzyme_goto_comment_end, doc: "Go to end of current comment" };
     pub const enzyme_goto_class_start: Self = Self::Static { name: "enzyme_goto_class_start", fun: enzyme_goto_class_start, doc: "Go to start of current class/type" };
     pub const enzyme_goto_class_end: Self = Self::Static { name: "enzyme_goto_class_end", fun: enzyme_goto_class_end, doc: "Go to end of current class/type" };
     pub const enzyme_goto_section_start: Self = Self::Static { name: "enzyme_goto_section_start", fun: enzyme_goto_section_start, doc: "Go to start of current section" };
@@ -254,10 +256,12 @@ impl MappableCommand {
     pub const enzyme_select_word: Self = Self::Static { name: "enzyme_select_word", fun: enzyme_select_word, doc: "Select current word" };
     pub const enzyme_select_long_word: Self = Self::Static { name: "enzyme_select_long_word", fun: enzyme_select_long_word, doc: "Select current long word" };
     pub const enzyme_select_function: Self = Self::Static { name: "enzyme_select_function", fun: enzyme_select_function, doc: "Select current function" };
+    pub const enzyme_select_comment: Self = Self::Static { name: "enzyme_select_comment", fun: enzyme_select_comment, doc: "Select current comment" };
+    pub const enzyme_select_inside_comment: Self = Self::Static { name: "enzyme_select_inside_comment", fun: enzyme_select_inside_comment, doc: "Select inside current comment" };
     pub const enzyme_select_class: Self = Self::Static { name: "enzyme_select_class", fun: enzyme_select_class, doc: "Select current class/type" };
     pub const enzyme_select_section: Self = Self::Static { name: "enzyme_select_section", fun: enzyme_select_section, doc: "Select current section" };
     pub const enzyme_select_block: Self = Self::Static { name: "enzyme_select_block", fun: enzyme_select_block, doc: "Select current structural block" };
     pub const enzyme_select_pair: Self = Self::Static { name: "enzyme_select_pair", fun: enzyme_select_pair, doc: "Select closest matching pair" };
     pub const enzyme_select_inside_pair: Self = Self::Static { name: "enzyme_select_inside_pair", fun: enzyme_select_inside_pair, doc: "Select inside closest matching pair" };
-    pub const enzyme_select_document: Self = Self::Static { name: "enzyme_select_document", fun: enzyme_select_document, doc: "Select whole document" };
+    pub const enzyme_select_file: Self = Self::Static { name: "enzyme_select_file", fun: enzyme_select_file, doc: "Select whole file" };
 }
