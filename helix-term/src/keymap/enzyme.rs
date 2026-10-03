@@ -58,13 +58,26 @@ fn remember_transient_selection(cx: &mut Context, action: impl FnOnce(&mut Conte
     });
 }
 
-/// Cancel only the still-current transient Enzyme selection.
+/// Backspace is Primer's "oops, never mind" key for transient selection work.
 ///
-/// We validate the document version *and* the resulting selection before
-/// restoring anything. That makes Backspace a safe selection cancel rather than
-/// a second undo command: after an edit or later cursor/selection movement, the
-/// saved transient state is stale and is simply discarded.
+/// In Select mode the range anchor already records where interactive selection
+/// began, so canceling can collapse each range back to its anchor and leave
+/// Select mode. For direct `s...` object selections in Normal mode we instead
+/// restore the exact pre-command selection saved by `remember_transient_selection`.
+/// Neither path touches document contents or Helix's edit undo history.
 fn enzyme_cancel_transient_selection(cx: &mut Context) {
+    if cx.editor.mode == Mode::Select {
+        let (view, doc) = current!(cx.editor);
+        let selection = doc
+            .selection(view.id)
+            .clone()
+            .transform(|range| Range::point(range.anchor));
+        doc.set_selection(view.id, selection);
+        cx.editor.mode = Mode::Normal;
+        TRANSIENT_SELECTION.with(|slot| *slot.borrow_mut() = None);
+        return;
+    }
+
     let saved = TRANSIENT_SELECTION.with(|slot| slot.borrow_mut().take());
     let Some(saved) = saved else { return; };
 
