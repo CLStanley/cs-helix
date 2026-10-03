@@ -110,6 +110,45 @@ fn enzyme_goto_previous_section(cx: &mut Context) {
     navigate_without_selecting(cx, MappableCommand::goto_prev_paragraph, motion_head);
 }
 
+/// Move to a boundary of the word object currently under the cursor.
+///
+/// `long_word` is the same distinction Helix exposes as `w` versus `W`: normal
+/// words honor punctuation boundaries, while long words are whitespace-delimited.
+/// In Select mode we preserve the existing anchor and move only the active head,
+/// so the same `gsw`/`gew` grammar naturally extends a selection.
+fn goto_word_boundary(cx: &mut Context, long_word: bool, start: bool) {
+    let mode = cx.editor.mode;
+    let (view, doc) = current!(cx.editor);
+    let text = doc.text().slice(..);
+    let selection = doc.selection(view.id).clone().transform(|range| {
+        let cursor = range.cursor(text);
+        let word = textobject::textobject_word(
+            text,
+            Range::point(cursor),
+            textobject::TextObject::Inside,
+            1,
+            long_word,
+        );
+        let target = if start {
+            word.from()
+        } else {
+            word.to().saturating_sub(1)
+        };
+
+        if mode == Mode::Select {
+            Range::new(range.anchor, target)
+        } else {
+            Range::point(target)
+        }
+    });
+    doc.set_selection(view.id, selection);
+}
+
+fn enzyme_goto_word_start(cx: &mut Context) { goto_word_boundary(cx, false, true); }
+fn enzyme_goto_word_end(cx: &mut Context) { goto_word_boundary(cx, false, false); }
+fn enzyme_goto_long_word_start(cx: &mut Context) { goto_word_boundary(cx, true, true); }
+fn enzyme_goto_long_word_end(cx: &mut Context) { goto_word_boundary(cx, true, false); }
+
 fn select_helix_textobject(cx: &mut Context, around: bool, object_key: char) {
     let command = if around { MappableCommand::select_textobject_around } else { MappableCommand::select_textobject_inner };
     command.execute(cx);
@@ -164,6 +203,9 @@ fn enzyme_select_line(cx: &mut Context) {
 fn enzyme_select_word(cx: &mut Context) {
     remember_transient_selection(cx, |cx| select_helix_textobject(cx, true, 'w'));
 }
+fn enzyme_select_long_word(cx: &mut Context) {
+    remember_transient_selection(cx, |cx| select_helix_textobject(cx, true, 'W'));
+}
 fn enzyme_select_function(cx: &mut Context) {
     remember_transient_selection(cx, |cx| select_helix_textobject(cx, true, 'f'));
 }
@@ -202,8 +244,13 @@ impl MappableCommand {
     pub const enzyme_goto_previous_class: Self = Self::Static { name: "enzyme_goto_previous_class", fun: enzyme_goto_previous_class, doc: "Go to previous class/type" };
     pub const enzyme_goto_next_section: Self = Self::Static { name: "enzyme_goto_next_section", fun: enzyme_goto_next_section, doc: "Go to next section" };
     pub const enzyme_goto_previous_section: Self = Self::Static { name: "enzyme_goto_previous_section", fun: enzyme_goto_previous_section, doc: "Go to previous section" };
+    pub const enzyme_goto_word_start: Self = Self::Static { name: "enzyme_goto_word_start", fun: enzyme_goto_word_start, doc: "Go to start of current word" };
+    pub const enzyme_goto_word_end: Self = Self::Static { name: "enzyme_goto_word_end", fun: enzyme_goto_word_end, doc: "Go to end of current word" };
+    pub const enzyme_goto_long_word_start: Self = Self::Static { name: "enzyme_goto_long_word_start", fun: enzyme_goto_long_word_start, doc: "Go to start of current long word" };
+    pub const enzyme_goto_long_word_end: Self = Self::Static { name: "enzyme_goto_long_word_end", fun: enzyme_goto_long_word_end, doc: "Go to end of current long word" };
     pub const enzyme_select_line: Self = Self::Static { name: "enzyme_select_line", fun: enzyme_select_line, doc: "Select current line" };
     pub const enzyme_select_word: Self = Self::Static { name: "enzyme_select_word", fun: enzyme_select_word, doc: "Select current word" };
+    pub const enzyme_select_long_word: Self = Self::Static { name: "enzyme_select_long_word", fun: enzyme_select_long_word, doc: "Select current long word" };
     pub const enzyme_select_function: Self = Self::Static { name: "enzyme_select_function", fun: enzyme_select_function, doc: "Select current function" };
     pub const enzyme_select_class: Self = Self::Static { name: "enzyme_select_class", fun: enzyme_select_class, doc: "Select current class/type" };
     pub const enzyme_select_section: Self = Self::Static { name: "enzyme_select_section", fun: enzyme_select_section, doc: "Select current section" };
