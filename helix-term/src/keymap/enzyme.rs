@@ -4,54 +4,53 @@
 //! the operation. The commands in this module exist only where Primer wants a
 //! different *resulting interaction* from the same Helix operation.
 //!
-//! For structural navigation, Helix already knows what a function or class is,
-//! how Tree-sitter represents it for each language, and how to find the next or
-//! previous one. Enzyme therefore delegates that work to Helix and only changes
-//! the resulting structural selection into a navigation destination.
+//! The rule is intentionally small:
+//!
+//! - Helix decides what the motion means and where it goes.
+//! - Enzyme decides whether Normal mode should keep Helix's implicit selection.
 //!
 //! Rust learning note: `//!` is an inner documentation comment. It documents
-//! the module itself rather than the item immediately following the comment.
+//! this module rather than the item immediately following the comment.
 
 use helix_core::Range;
 use helix_view::document::Mode;
 
 use crate::commands::{Context, MappableCommand};
 
-/// Run one of Helix's structural-navigation commands, then apply Enzyme's
-/// navigation semantics to the selection Helix produced.
+/// Run an existing Helix motion and normalize its result for Enzyme navigation.
 ///
-/// The important boundary here is intentional:
+/// Some Helix motions represent movement by returning a non-point `Range`.
+/// That is useful for Helix's selection-first editing model, but Enzyme keeps
+/// navigation and selection as separate grammar concepts. In Normal mode we
+/// therefore collapse the Range Helix produced to a cursor. In Select mode we
+/// leave Helix's result alone.
 ///
-/// 1. `helix_command.execute(cx)` lets Helix determine the structural object.
-/// 2. Enzyme only post-processes Helix's resulting selection.
-///
-/// That keeps language and Tree-sitter knowledge in Helix instead of duplicating
-/// it in Primer.
+/// This function intentionally knows nothing about functions, classes,
+/// paragraphs, Tree-sitter, or programming languages. That knowledge remains
+/// in the Helix command passed to us.
 fn navigate_without_selecting(cx: &mut Context, helix_command: MappableCommand) {
-    // Rust learning note: `MappableCommand` is an enum. Calling `execute` here
-    // uses Helix's public command abstraction instead of reaching into private
-    // functions such as `goto_next_function` directly.
+    // Rust learning note: `MappableCommand` is an enum whose `Static` variant
+    // stores a function pointer. Calling `execute` lets us reuse the exact same
+    // command that an ordinary Helix key binding would invoke.
     helix_command.execute(cx);
 
-    // In Select mode Helix already has the semantics we want: preserve the
-    // original anchor and extend to the structural destination. Selection-mode
-    // grammar can therefore continue to use Helix behavior unchanged.
+    // Select mode is explicitly asking for selection behavior, so Enzyme has
+    // nothing to normalize there.
     if cx.editor.mode == Mode::Select {
         return;
     }
 
-    // Rust learning note: `current!` is a Helix macro. A macro can expand to
-    // code that would be repetitive to write by hand; here it retrieves the
-    // active view and document while handling their borrowing correctly.
+    // `current!` is a Helix macro. It expands to the boilerplate needed to get
+    // mutable access to the active view and document while satisfying Rust's
+    // borrowing rules.
     let (view, doc) = current!(cx.editor);
 
-    // Helix has already selected the exact object it considers next/previous.
-    // We do not inspect syntax or try to identify that object ourselves. We
-    // simply collapse each resulting range to its lexical start.
+    // Helix has already performed the motion. At this point we alter only the
+    // shape of its resulting selection: `Range::point` represents a cursor.
     //
-    // `Range::from()` returns the lower document position regardless of whether
-    // Helix oriented the range forward or backward. `Range::point()` then turns
-    // that position into a cursor-sized range.
+    // NOTE: `from()` is deliberately isolated here. If a Helix motion's true
+    // navigation endpoint is not its lexical range start, we can improve this
+    // one adapter without teaching Enzyme how that motion itself works.
     let selection = doc
         .selection(view.id)
         .clone()
@@ -60,9 +59,11 @@ fn navigate_without_selecting(cx: &mut Context, helix_command: MappableCommand) 
     doc.set_selection(view.id, selection);
 }
 
-// These functions are deliberately tiny adapters. Notice that there is no
-// Tree-sitter query, object-name string, or direction calculation here: Helix's
-// existing commands remain responsible for all of those decisions.
+// Thin adapters -------------------------------------------------------------
+//
+// Each function below delegates the actual motion to Helix. We only create an
+// Enzyme wrapper when the Helix command leaves a selection in Normal mode.
+
 fn enzyme_goto_next_function(cx: &mut Context) {
     navigate_without_selecting(cx, MappableCommand::goto_next_function);
 }
@@ -79,6 +80,14 @@ fn enzyme_goto_previous_class(cx: &mut Context) {
     navigate_without_selecting(cx, MappableCommand::goto_prev_class);
 }
 
+fn enzyme_goto_next_section(cx: &mut Context) {
+    navigate_without_selecting(cx, MappableCommand::goto_next_paragraph);
+}
+
+fn enzyme_goto_previous_section(cx: &mut Context) {
+    navigate_without_selecting(cx, MappableCommand::goto_prev_paragraph);
+}
+
 // Rust learning note: this is an inherent `impl` block. It adds associated
 // constants to the existing `MappableCommand` type. Each constant packages a
 // function pointer and help text in the same form Helix's keymap already uses.
@@ -91,24 +100,36 @@ impl MappableCommand {
     pub const enzyme_goto_next_function: Self = Self::Static {
         name: "enzyme_goto_next_function",
         fun: enzyme_goto_next_function,
-        doc: "Go to start of next function",
+        doc: "Go to next function",
     };
 
     pub const enzyme_goto_previous_function: Self = Self::Static {
         name: "enzyme_goto_previous_function",
         fun: enzyme_goto_previous_function,
-        doc: "Go to start of previous function",
+        doc: "Go to previous function",
     };
 
     pub const enzyme_goto_next_class: Self = Self::Static {
         name: "enzyme_goto_next_class",
         fun: enzyme_goto_next_class,
-        doc: "Go to start of next class/type",
+        doc: "Go to next class/type",
     };
 
     pub const enzyme_goto_previous_class: Self = Self::Static {
         name: "enzyme_goto_previous_class",
         fun: enzyme_goto_previous_class,
-        doc: "Go to start of previous class/type",
+        doc: "Go to previous class/type",
+    };
+
+    pub const enzyme_goto_next_section: Self = Self::Static {
+        name: "enzyme_goto_next_section",
+        fun: enzyme_goto_next_section,
+        doc: "Go to next section",
+    };
+
+    pub const enzyme_goto_previous_section: Self = Self::Static {
+        name: "enzyme_goto_previous_section",
+        fun: enzyme_goto_previous_section,
+        doc: "Go to previous section",
     };
 }
