@@ -1,6 +1,6 @@
 # Primer Text Editor — Enzyme Selection Grammar
 
-> **Status:** Proposed v1 — ready for parity audit/dogfooding
+> **Status:** Proposed v1 — active implementation/dogfooding
 >
 > **Parent specification:** `MODAL_GRAMMAR.md`
 
@@ -17,6 +17,18 @@ v       enter interactive Select/Visual mode
 
 Primer preserves Helix's first-class selection model. Enzyme changes the vocabulary used to express intent, not the underlying range/multiple-selection machinery.
 
+## Core selection rule
+
+Enzyme selection has one general relationship rule:
+
+> **`s + object` selects the whole object. `s + i + object` selects the contents inside that object.**
+
+The whole-object form includes the object's boundaries when the object has meaningful boundaries. The `i` modifier removes those boundaries and selects the contents.
+
+This replaces the earlier `inside` / `outside` split. There is no `so...` family: selecting the object itself already means selecting the whole/around object, so an additional `outside` spelling would be redundant.
+
+Primer should only advertise `si<object>` combinations for which the underlying editor can define a useful and reliable inside range.
+
 ## Core object vocabulary
 
 | Key | Object | Notes |
@@ -25,12 +37,30 @@ Primer preserves Helix's first-class selection model. Enzyme changes the vocabul
 | `w` | word | Word under/at cursor. |
 | `f` | function/method | Language-neutral callable concept. |
 | `c` | class/type | Structural type/class declaration. |
-| `b` | structural block | Syntax-aware block. |
+| `b` | structural block | **Tree-sitter/language-defined** block. |
 | `s` | section | Paragraph/logical text section containing the cursor. |
-| `p` | pair | Paired delimiters/syntax object when used in inside/outside grammar. |
+| `p` | pair | Matching delimiters such as `()`, `[]`, `{}`, quotes, etc. |
 | `d` | document | Whole document. |
 
 Structural objects should use Tree-sitter where practical. Section is Primer's user-facing term for the paragraph-like text unit traditionally called a paragraph by modal editors.
+
+### Block and pair are intentionally different
+
+A **block** is a semantic/syntactic object defined by the language's Tree-sitter support. Primer should not redefine a block as "whatever is inside braces." Different languages may recognize different structures as blocks.
+
+A **pair** is a matching-delimiter relationship that is useful even when the user does not yet understand a language's structural grammar:
+
+```text
+( ... )
+[ ... ]
+{ ... }
+" ... "
+' ... '
+```
+
+A brace-delimited construct may happen to be both a Tree-sitter block and a pair, but those are separate concepts.
+
+This distinction provides a deliberate fallback for unfamiliar languages. A user who does not yet know what that language considers a block can still operate on visually recognizable matching pairs until they learn the language's structural objects.
 
 ## Direct object selection
 
@@ -40,11 +70,68 @@ Structural objects should use Tree-sitter where practical. Section is Primer's u
 | `sw` | select word |
 | `sf` | select current function/method |
 | `sc` | select current class/type |
-| `sb` | select current structural block |
+| `sb` | select current Tree-sitter structural block |
 | `ss` | select current section |
+| `sp` | select surrounding pair, including delimiters |
 | `sd` | select whole document |
 
 These acquire the containing/current object directly. They are for the thought "select this thing," rather than "start selecting while I move."
+
+`sd` is Enzyme's select-all spelling. `d` already means document in Navigation (`gsd`, `ged`, etc.), so `sd` follows the grammar without introducing a separate `all` concept. The `s` namespace also makes it less likely to trigger accidentally than a single immediate select-all key.
+
+## Inside selection
+
+`i` means **inside** and appears between the Select verb and the object:
+
+```text
+s i [object]
+```
+
+Established examples:
+
+| Key | Meaning |
+|---|---|
+| `sip` | select inside surrounding pair, excluding delimiters |
+| `sib` | select inside current Tree-sitter block, excluding its structural boundaries when Helix/Tree-sitter can define that range reliably |
+
+The same rule can extend naturally to other objects (`sif`, `sic`, `sis`, etc.) only when Helix/Tree-sitter supplies a meaningful distinction between the whole object and its contents. Primer should not invent arbitrary inside semantics merely to make the grammar exhaustive.
+
+For pairs, the intended behavior is explicit:
+
+```text
+foo(alpha, beta)
+   ^-----------^   sp  -> (alpha, beta)
+    ^---------^    sip -> alpha, beta
+```
+
+Pair selection must use matching-pair semantics rather than treating a pair as a Tree-sitter block.
+
+## Canceling an accidental/transient selection
+
+Primer distinguishes **leaving a mode**, **canceling a transient operation**, and **undoing an edit**:
+
+```text
+Esc         exit/cancel the current mode or incomplete grammar sentence
+Backspace   "oops, never mind" — cancel the current transient Enzyme operation
+u           undo an actual edit
+;           collapse the current selection at its active position
+```
+
+For an Enzyme object selection, Backspace should restore the selection/cursor state that existed immediately before the transient selection operation when that state is available.
+
+Example:
+
+```text
+cursor inside a function
+sf
+Backspace
+```
+
+The function selection is abandoned and the cursor returns to its pre-`sf` position.
+
+Backspace is **not** an editing undo mechanism. Once an action has changed the document, `u` remains the way to undo that edit.
+
+Esc must not acquire hidden "rewind all Select-mode navigation" semantics. In Select/Visual mode, Esc continues to mean leave the mode according to Primer's modal rules.
 
 ## Interactive Select/Visual mode
 
@@ -85,25 +172,7 @@ Not every Navigation command can sensibly extend a contiguous selection. Structu
 
 Examples such as `gd` (definition), `gi` (implementation), or `gt` (type definition) must be audited against Helix behavior and Primer's selection model before implementation. Primer should preserve useful Helix behavior where possible, but must not pretend a cross-buffer range exists when the underlying editor cannot represent one.
 
-`Esc` exits/cancels back toward the safe normal state according to Primer's general mode rules.
-
-## Inside / outside relationships
-
-For paired or nested syntax, explicit object selection uses a relationship before the object:
-
-```text
-s i [object]    select inside object
-s o [object]    select outside/around object
-```
-
-Initial forms:
-
-| Key | Meaning |
-|---|---|
-| `sip` | select inside pair |
-| `sop` | select outside/around pair |
-
-The same relationship may be reused for syntax objects where Tree-sitter can define reliable inside/around ranges. Primer should not advertise theoretical combinations with inconsistent semantics.
+`Esc` exits Select/Visual mode toward the safe normal state according to Primer's general mode rules. It does not rewind all movement performed while Select mode was active.
 
 ## Multiple-selection grammar
 
@@ -157,6 +226,8 @@ spo    select → primary → only
 
 `spn/spN` rotate which existing selection is primary. `spo` keeps only the primary selection.
 
+**Grammar note:** direct `sp` now means **select pair**. The longer `sp...` primary-selection branch therefore has a prefix collision and must be revisited before implementation. Do not silently overload `sp` as both a completed pair command and a primary-selection namespace.
+
 ### Keep/filter selections
 
 ```text
@@ -208,14 +279,13 @@ l    line
 w    word
 f    function/method
 c    class/type
-b    block
+b    block (Tree-sitter/language-defined)
 s    section
+p    pair
 d    document
 i    inside…
-o    outside/around…
 a    add selection…
 r    remove selection…
-p    primary selection…
 k    keep/filter selections…
 x    split selection…
 ```
@@ -226,25 +296,33 @@ Select/Visual mode should instead surface compatible motions/navigation because 
 
 1. `s` means deliberate object-selection grammar.
 2. `v` preserves interactive Select/Visual mode.
-3. In Select/Visual mode, compatible navigation extends the selection; do not require a redundant `se` prefix.
-4. Preserve Helix's first-class and multiple-selection model.
-5. Reuse Navigation vocabulary rather than creating a parallel extension vocabulary.
-6. Use Tree-sitter for structural selections where practical.
-7. Relationships such as inside/outside precede the object: `sip`, `sop`.
-8. `n/N` retain next/previous meaning inside selection-set operations.
-9. Contextual letter reuse is acceptable when grammatical position makes the branch clear.
-10. Prefer the strongest mnemonic for common/core operations; rarer advanced families may accept a weaker documented mnemonic when necessary (`ss = section`, `sx = split`).
-11. Primer must account for existing Helix motion/selection capabilities through an explicit parity audit before Enzyme v1 is declared complete.
-12. Do not invent bindings merely to make the grammar exhaustive; preserve sensible conventions when they already satisfy Primer's philosophy.
+3. `s + object` selects the whole object; `s + i + object` selects inside it when a meaningful inside range exists.
+4. There is no redundant `so...` outside/around family; whole-object selection already supplies that meaning.
+5. `block` is Tree-sitter/language-defined; `pair` is a separate matching-delimiter concept and acts as a predictable fallback in unfamiliar languages.
+6. In Select/Visual mode, compatible navigation extends the selection; do not require a redundant `se` prefix.
+7. Preserve Helix's first-class and multiple-selection model.
+8. Reuse Navigation vocabulary rather than creating a parallel extension vocabulary.
+9. `sd` is select document/select all.
+10. Backspace means cancel the current transient Enzyme operation and restore its pre-operation state when available; Esc remains mode exit/cancel, and `u` remains editing undo.
+11. `n/N` retain next/previous meaning inside selection-set operations.
+12. Contextual letter reuse is acceptable when grammatical position makes the branch clear, but a completed command may not simultaneously be an ambiguous namespace (`sp` pair vs `sp...` primary currently needs redesign).
+13. Prefer the strongest mnemonic for common/core operations; rarer advanced families may accept a weaker documented mnemonic when necessary (`ss = section`, `sx = split`).
+14. Primer must account for existing Helix motion/selection capabilities through an explicit parity audit before Enzyme v1 is declared complete.
+15. Do not invent bindings merely to make the grammar exhaustive; preserve sensible conventions when they already satisfy Primer's philosophy.
 
 ## Selection v1 remaining decisions
 
-`se...` is no longer unresolved; it is intentionally removed. `v` plus compatible motion is the extension model.
+`se...` is intentionally removed. `v` plus compatible motion is the extension model.
 
-Before Enzyme v1 is frozen, Primer still needs a **Helix parity audit** covering:
+`so...` is intentionally removed. Selecting an object directly is the whole/around form; `si...` is the inside modifier.
 
-- every normal movement/motion and whether it is already represented by Enzyme;
-- the corresponding Select/Visual extension behavior for compatible motions;
+Before Enzyme v1 is frozen, Primer still needs:
+
+- a new spelling for the primary-selection operations previously proposed under `sp...`, because `sp` now means select pair;
+- implementation verification for `sp` / `sip` using true matching-pair semantics;
+- implementation verification for `sb` / `sib` using Tree-sitter-defined block semantics;
+- Backspace transient-selection cancellation/restoration;
+- a **Helix parity audit** covering every normal movement/motion and corresponding Select/Visual extension behavior;
 - syntax-tree selection growth/shrink and sibling/parent/child traversal;
 - character find/till and repeat-last-motion behavior;
 - page/half-page and viewport-relative motions;
