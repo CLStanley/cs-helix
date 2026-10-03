@@ -51,14 +51,14 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
                 // mode Enzyme navigation collapses that range back to its start.
                 "f" => enzyme_goto_next_function,
                 "c" => enzyme_goto_next_class,
-                "s" => goto_next_paragraph,
+                "s" => enzyme_goto_next_section,
                 "m" => goto_next_change,
             },
             "N" => { "Previous"
                 "d" => goto_prev_diag,
                 "f" => enzyme_goto_previous_function,
                 "c" => enzyme_goto_previous_class,
-                "s" => goto_prev_paragraph,
+                "s" => enzyme_goto_previous_section,
                 "m" => goto_prev_change,
             },
             "d" => goto_definition,
