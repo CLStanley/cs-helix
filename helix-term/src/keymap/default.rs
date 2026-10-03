@@ -39,10 +39,14 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "g" => { "Go"
             "s" => { "Start of"
                 "l" => goto_line_start,
+                "w" => enzyme_goto_word_start,
+                "W" => enzyme_goto_long_word_start,
                 "d" => goto_file_start,
             },
             "e" => { "End of"
                 "l" => goto_line_end,
+                "w" => enzyme_goto_word_end,
+                "W" => enzyme_goto_long_word_end,
                 "d" => goto_last_line,
             },
             "n" => { "Next"
@@ -91,6 +95,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "s" => { "Select"
             "l" => enzyme_select_line,
             "w" => enzyme_select_word,
+            "W" => enzyme_select_long_word,
             "f" => enzyme_select_function,
             "c" => enzyme_select_class,
             "s" => enzyme_select_section,
@@ -201,6 +206,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "A-)" => rotate_selection_contents_forward,
         "A-:" => ensure_selections_forward,
 
+        "backspace" => enzyme_cancel_transient_selection,
         "esc" => normal_mode,
         "C-b" | "pageup" => page_up,
         "C-f" | "pagedown" => page_down,
@@ -376,10 +382,14 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "g" => { "Go"
             "s" => { "Start of"
                 "l" => extend_to_line_start,
+                "w" => enzyme_goto_word_start,
+                "W" => enzyme_goto_long_word_start,
                 "d" => extend_to_file_start,
             },
             "e" => { "End of"
                 "l" => extend_to_line_end,
+                "w" => enzyme_goto_word_end,
+                "W" => enzyme_goto_long_word_end,
                 "d" => extend_to_last_line,
             },
             "n" => { "Next"
