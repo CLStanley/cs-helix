@@ -1,11 +1,11 @@
 //! Primer-specific Enzyme motion commands.
 //!
 //! Keep Primer's modal grammar implementation isolated from Helix's upstream
-//! command implementations.  Enzyme navigation deliberately treats a
+//! command implementations. Enzyme navigation deliberately treats a
 //! structural object as a destination, not as an implicit selection.
 
 use helix_core::{movement, Range};
-use helix_view::{document::Mode, editor::Motion};
+use helix_view::document::Mode;
 
 use crate::commands::{Context, MappableCommand};
 
@@ -42,9 +42,9 @@ impl StructuralDirection {
 /// Navigate to the start of a Tree-sitter structural object.
 ///
 /// Helix's structural-object motions intentionally return the whole object as
-/// a selection.  Enzyme separates navigation from selection: in Normal mode
+/// a selection. Enzyme separates navigation from selection: in Normal mode
 /// the resulting object range is normalized to a single cursor destination at
-/// the object's start.  In Select mode the existing anchor is extended to the
+/// the object's start. In Select mode the existing anchor is extended to the
 /// exact same destination.
 fn goto_structural_object(
     cx: &mut Context,
@@ -75,7 +75,7 @@ fn goto_structural_object(
                 count,
             );
 
-            // Tree-sitter motions return a range describing the object.  The
+            // Tree-sitter motions return a range describing the object. The
             // destination of an Enzyme `go` command is always the object's
             // lexical start, independent of traversal direction.
             let destination = object_range.from();
@@ -90,7 +90,7 @@ fn goto_structural_object(
         doc.set_selection(view.id, selection);
     };
 
-    cx.editor.apply_motion(Motion::Move, motion);
+    cx.editor.apply_motion(motion);
 }
 
 fn enzyme_goto_next_function(cx: &mut Context) {
