@@ -10,7 +10,6 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "j" | "down" => move_visual_line_down,
         "k" | "up" => move_visual_line_up,
         "l" | "right" => move_char_right,
-
         "t" => find_till_char,
         "f" => find_next_char,
         "T" => till_prev_char,
@@ -18,35 +17,38 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "r" => replace,
         "R" => replace_with_yanked,
         "A-." => repeat_last_motion,
-
         "~" => switch_case,
         "`" => switch_to_lowercase,
         "A-`" => switch_to_uppercase,
-
         "home" => goto_line_start,
         "end" => goto_line_end,
-
         "w" => move_next_word_start,
         "b" => move_prev_word_start,
         "e" => move_next_word_end,
-
         "W" => move_next_long_word_start,
         "B" => move_prev_long_word_start,
         "E" => move_next_long_word_end,
-
         "v" => select_mode,
         "G" => goto_line,
         "g" => { "Go"
             "s" => { "Start of"
-                "l" => goto_line_start,
+                "l" => enzyme_goto_line_content_start,
                 "w" => enzyme_goto_word_start,
                 "W" => enzyme_goto_long_word_start,
+                "f" => enzyme_goto_function_start,
+                "c" => enzyme_goto_class_start,
+                "s" => enzyme_goto_section_start,
+                "b" => enzyme_goto_block_start,
                 "d" => goto_file_start,
             },
             "e" => { "End of"
                 "l" => goto_line_end,
                 "w" => enzyme_goto_word_end,
                 "W" => enzyme_goto_long_word_end,
+                "f" => enzyme_goto_function_end,
+                "c" => enzyme_goto_class_end,
+                "s" => enzyme_goto_section_end,
+                "b" => enzyme_goto_block_end,
                 "d" => goto_last_line,
             },
             "n" => { "Next"
@@ -56,18 +58,20 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
                 "s" => enzyme_goto_next_section,
                 "m" => goto_next_change,
             },
-            "N" => { "Previous"
+            "p" => { "Previous"
                 "d" => goto_prev_diag,
                 "f" => enzyme_goto_previous_function,
                 "c" => enzyme_goto_previous_class,
                 "s" => enzyme_goto_previous_section,
                 "m" => goto_prev_change,
+                "p" => match_brackets,
             },
+            "0" => goto_line_start,
+            "l" => enzyme_goto_line_number,
             "d" => goto_definition,
             "D" => goto_declaration,
             "i" => goto_implementation,
             "t" => goto_type_definition,
-            "p" => match_brackets,
             "|" => goto_column,
             "f" => goto_file,
             "r" => goto_reference,
@@ -77,21 +81,18 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
             "w" => goto_word,
         },
         ":" => command_mode,
-
         "i" => insert_mode,
         "I" => insert_at_line_start,
         "a" => append_mode,
         "A" => insert_at_line_end,
         "o" => open_below,
         "O" => open_above,
-
         "d" => delete_selection,
         "A-d" => delete_selection_noyank,
         "c" => change_selection,
         "A-c" => change_selection_noyank,
         "C" => copy_selection_on_next_line,
         "A-C" => copy_selection_on_prev_line,
-
         "s" => { "Select"
             "l" => enzyme_select_line,
             "w" => enzyme_select_word,
@@ -124,12 +125,10 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "A-e" => move_parent_node_end,
         "A-b" => move_parent_node_start,
         "A-a" => select_all_siblings,
-
         "%" => select_all,
         "x" => extend_line_below,
         "X" => extend_to_line_bounds,
         "A-x" => shrink_to_line_bounds,
-
         "m" => { "Match"
             "m" => match_brackets,
             "s" => surround_add,
@@ -168,26 +167,21 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
             "x" => goto_next_xml_element,
             "space" => add_newline_below,
         },
-
         "/" => search,
         "?" => rsearch,
         "n" => search_next,
         "N" => search_prev,
         "*" => search_selection_detect_word_boundaries,
         "A-*" => search_selection,
-
         "u" => undo,
         "U" => redo,
         "A-u" => earlier,
         "A-U" => later,
-
         "y" => yank,
         "p" => paste_after,
         "P" => paste_before,
-
         "Q" => record_macro,
         "q" => replay_macro,
-
         ">" => indent,
         "<" => unindent,
         "=" => format_selections,
@@ -195,7 +189,6 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "A-J" => join_selections_space,
         "K" => keep_selections,
         "A-K" => remove_selections,
-
         "," => keep_primary_selection,
         "A-," => remove_primary_selection,
         "&" => align_selections,
@@ -205,14 +198,12 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "A-(" => rotate_selection_contents_backward,
         "A-)" => rotate_selection_contents_forward,
         "A-:" => ensure_selections_forward,
-
         "backspace" => enzyme_cancel_transient_selection,
         "esc" => normal_mode,
         "C-b" | "pageup" => page_up,
         "C-f" | "pagedown" => page_down,
         "C-u" => page_cursor_half_up,
         "C-d" => page_cursor_half_down,
-
         "C-w" => { "Window"
             "C-w" | "w" => rotate_view,
             "C-s" | "s" => hsplit,
@@ -235,12 +226,10 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
                 "C-v" | "v" => vsplit_new,
             },
         },
-
         "C-c" => toggle_comments,
         "C-i" | "tab" => jump_forward,
         "C-o" => jump_backward,
         "C-s" => save_selection,
-
         "space" => { "Space"
             "f" => file_picker,
             "F" => file_picker_in_current_directory,
@@ -343,7 +332,6 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
             "n" => search_next,
             "N" => search_prev,
         },
-
         "\"" => select_register,
         "|" => shell_pipe,
         "A-|" => shell_pipe_to,
@@ -377,19 +365,28 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "F" => extend_prev_char,
         "home" => extend_to_line_start,
         "end" => extend_to_line_end,
+        "backspace" => enzyme_cancel_transient_selection,
         "esc" => exit_select_mode,
         "v" => normal_mode,
         "g" => { "Go"
             "s" => { "Start of"
-                "l" => extend_to_line_start,
+                "l" => enzyme_goto_line_content_start,
                 "w" => enzyme_goto_word_start,
                 "W" => enzyme_goto_long_word_start,
+                "f" => enzyme_goto_function_start,
+                "c" => enzyme_goto_class_start,
+                "s" => enzyme_goto_section_start,
+                "b" => enzyme_goto_block_start,
                 "d" => extend_to_file_start,
             },
             "e" => { "End of"
                 "l" => extend_to_line_end,
                 "w" => enzyme_goto_word_end,
                 "W" => enzyme_goto_long_word_end,
+                "f" => enzyme_goto_function_end,
+                "c" => enzyme_goto_class_end,
+                "s" => enzyme_goto_section_end,
+                "b" => enzyme_goto_block_end,
                 "d" => extend_to_last_line,
             },
             "n" => { "Next"
@@ -399,14 +396,16 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
                 "s" => enzyme_goto_next_section,
                 "m" => goto_next_change,
             },
-            "N" => { "Previous"
+            "p" => { "Previous"
                 "d" => goto_prev_diag,
                 "f" => enzyme_goto_previous_function,
                 "c" => enzyme_goto_previous_class,
                 "s" => enzyme_goto_previous_section,
                 "m" => goto_prev_change,
+                "p" => match_brackets,
             },
-            "p" => match_brackets,
+            "0" => extend_to_line_start,
+            "l" => enzyme_goto_line_number,
             "w" => extend_to_word,
             "|" => extend_to_column,
             "k" => extend_line_up,
