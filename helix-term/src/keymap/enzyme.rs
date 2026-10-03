@@ -68,9 +68,14 @@ fn select_pair(cx: &mut Context, object: textobject::TextObject) {
                 let start = cursor.min(matching);
                 let end = cursor.max(matching);
 
+                // Rust requires enum matches to be exhaustive. Enzyme only calls
+                // this helper with Around or Inside, but Helix's TextObject enum
+                // also has Movement. Keeping that arm explicit documents the
+                // invariant and lets the compiler protect us if this changes.
                 return match object {
                     textobject::TextObject::Around => Range::new(start, end + 1),
                     textobject::TextObject::Inside => Range::new(start + 1, end),
+                    textobject::TextObject::Movement => range,
                 };
             }
         }
