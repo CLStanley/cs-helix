@@ -49,15 +49,15 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
                 "d" => goto_next_diag,
                 // Helix's Tree-sitter object motions select the object. In Normal
                 // mode Enzyme navigation collapses that range back to its start.
-                "f" => [enzyme_goto_next_function, move_parent_node_start],
-                "c" => [enzyme_goto_next_class, move_parent_node_start],
+                "f" => enzyme_goto_next_function,
+                "c" => enzyme_goto_next_class,
                 "s" => goto_next_paragraph,
                 "m" => goto_next_change,
             },
             "N" => { "Previous"
                 "d" => goto_prev_diag,
-                "f" => [enzyme_goto_previous_function, move_parent_node_start],
-                "c" => [enzyme_goto_previous_class, move_parent_node_start],
+                "f" => enzyme_goto_previous_function,
+                "c" => enzyme_goto_previous_class,
                 "s" => goto_prev_paragraph,
                 "m" => goto_prev_change,
             },
