@@ -17,79 +17,86 @@ use helix_view::document::Mode;
 
 use crate::commands::{Context, MappableCommand};
 
-/// Run an existing Helix motion and normalize its result for Enzyme navigation.
+/// Run an existing Helix motion and collapse each resulting range with `collapse`.
 ///
-/// Some Helix motions represent movement by returning a non-point `Range`.
-/// That is useful for Helix's selection-first editing model, but Enzyme keeps
-/// navigation and selection as separate grammar concepts. In Normal mode we
-/// therefore collapse the Range Helix produced to a cursor. In Select mode we
-/// leave Helix's result alone.
-///
-/// This function intentionally knows nothing about functions, classes,
-/// paragraphs, Tree-sitter, or programming languages. That knowledge remains
-/// in the Helix command passed to us.
-fn navigate_without_selecting(cx: &mut Context, helix_command: MappableCommand) {
-    // Rust learning note: `MappableCommand` is an enum whose `Static` variant
-    // stores a function pointer. Calling `execute` lets us reuse the exact same
-    // command that an ordinary Helix key binding would invoke.
+/// Rust learning note: `fn(Range) -> usize` is a function-pointer type. Passing
+/// the collapse rule as a function lets this adapter share all of the command
+/// execution/selection plumbing while still respecting different kinds of Helix
+/// motions. This is preferable to teaching one generic rule about semantics that
+/// are not actually generic.
+fn navigate_without_selecting(
+    cx: &mut Context,
+    helix_command: MappableCommand,
+    collapse: fn(Range) -> usize,
+) {
     helix_command.execute(cx);
 
-    // Select mode is explicitly asking for selection behavior, so Enzyme has
-    // nothing to normalize there.
+    // Select mode explicitly asks Helix to retain selection behavior.
     if cx.editor.mode == Mode::Select {
         return;
     }
 
-    // `current!` is a Helix macro. It expands to the boilerplate needed to get
-    // mutable access to the active view and document while satisfying Rust's
-    // borrowing rules.
     let (view, doc) = current!(cx.editor);
-
-    // A Helix Range has an `anchor` and a `head`. The head is the active end --
-    // in other words, the destination Helix moved *to*. `from()`/`to()` instead
-    // describe lexical ordering and discard direction. That distinction matters
-    // for directional motions: a forward and backward motion can select the same
-    // span while having opposite heads.
-    //
-    // Enzyme wants Helix to choose the destination, but does not want Normal
-    // mode to retain the implicit selection. Collapsing to `range.head` therefore
-    // preserves the actual Helix motion endpoint without reimplementing the
-    // motion or guessing which textual edge should win.
     let selection = doc
         .selection(view.id)
         .clone()
-        .transform(|range| Range::point(range.head));
+        .transform(|range| Range::point(collapse(range)));
 
     doc.set_selection(view.id, selection);
 }
 
+/// Structural Tree-sitter objects have a stable lexical start.
+///
+/// Helix's `goto_treesitter_object` constructs the object as
+/// `Range::new(start_char, end_char)`, then `goto_ts_object_impl` changes only
+/// its direction. Consequently `Range::from()` remains the object's real start
+/// for both next and previous structural navigation.
+fn structural_start(range: Range) -> usize {
+    range.from()
+}
+
+/// Paragraph/section movement is directional rather than a Tree-sitter object
+/// lookup. For those motions the active `head` is the destination Helix chose.
+fn motion_head(range: Range) -> usize {
+    range.head
+}
+
 // Thin adapters -------------------------------------------------------------
 //
-// Each function below delegates the actual motion to Helix. We only create an
-// Enzyme wrapper when the Helix command leaves a selection in Normal mode.
+// Functions/classes use the lexical start of the structural object. Sections
+// use Helix's directional motion head. Helix still owns all object detection and
+// movement logic; Enzyme only removes the implicit Normal-mode selection.
 
 fn enzyme_goto_next_function(cx: &mut Context) {
-    navigate_without_selecting(cx, MappableCommand::goto_next_function);
+    navigate_without_selecting(
+        cx,
+        MappableCommand::goto_next_function,
+        structural_start,
+    );
 }
 
 fn enzyme_goto_previous_function(cx: &mut Context) {
-    navigate_without_selecting(cx, MappableCommand::goto_prev_function);
+    navigate_without_selecting(
+        cx,
+        MappableCommand::goto_prev_function,
+        structural_start,
+    );
 }
 
 fn enzyme_goto_next_class(cx: &mut Context) {
-    navigate_without_selecting(cx, MappableCommand::goto_next_class);
+    navigate_without_selecting(cx, MappableCommand::goto_next_class, structural_start);
 }
 
 fn enzyme_goto_previous_class(cx: &mut Context) {
-    navigate_without_selecting(cx, MappableCommand::goto_prev_class);
+    navigate_without_selecting(cx, MappableCommand::goto_prev_class, structural_start);
 }
 
 fn enzyme_goto_next_section(cx: &mut Context) {
-    navigate_without_selecting(cx, MappableCommand::goto_next_paragraph);
+    navigate_without_selecting(cx, MappableCommand::goto_next_paragraph, motion_head);
 }
 
 fn enzyme_goto_previous_section(cx: &mut Context) {
-    navigate_without_selecting(cx, MappableCommand::goto_prev_paragraph);
+    navigate_without_selecting(cx, MappableCommand::goto_prev_paragraph, motion_head);
 }
 
 // Rust learning note: this is an inherent `impl` block. It adds associated
