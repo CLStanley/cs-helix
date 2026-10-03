@@ -1,13 +1,13 @@
-//! Primer-specific Enzyme motion adapters.
+//! Primer-specific Enzyme motion and selection adapters.
 //!
 //! Enzyme should reuse Helix behavior whenever Helix already knows how to do
 //! the operation. The commands in this module exist only where Primer wants a
-//! different *resulting interaction* from the same Helix operation.
+//! different *resulting interaction* or spelling from the same Helix operation.
 //!
 //! The rule is intentionally small:
 //!
-//! - Helix decides what the motion means and where it goes.
-//! - Enzyme decides whether Normal mode should keep Helix's implicit selection.
+//! - Helix decides what syntax objects mean and how they are selected/moved to.
+//! - Enzyme decides how those operations compose into Primer's grammar.
 //!
 //! Rust learning note: `//!` is an inner documentation comment. It documents
 //! this module rather than the item immediately following the comment.
@@ -61,11 +61,7 @@ fn motion_head(range: Range) -> usize {
     range.head
 }
 
-// Thin adapters -------------------------------------------------------------
-//
-// Functions/classes use the lexical start of the structural object. Sections
-// use Helix's directional motion head. Helix still owns all object detection and
-// movement logic; Enzyme only removes the implicit Normal-mode selection.
+// Navigation adapters -------------------------------------------------------
 
 fn enzyme_goto_next_function(cx: &mut Context) {
     navigate_without_selecting(
@@ -97,6 +93,91 @@ fn enzyme_goto_next_section(cx: &mut Context) {
 
 fn enzyme_goto_previous_section(cx: &mut Context) {
     navigate_without_selecting(cx, MappableCommand::goto_prev_paragraph, motion_head);
+}
+
+// Selection adapters --------------------------------------------------------
+
+/// Ask Helix to select a text object, but supply the object key on Enzyme's
+/// behalf instead of waiting for another physical key press.
+///
+/// Helix's `select_textobject_around` / `select_textobject_inner` commands are
+/// deliberately interactive: they install an `on_next_key` callback and then
+/// wait for a key such as `f`, `t`, `p`, or `m`. Enzyme already learned the
+/// user's intent from its own grammar (`sf`, `sc`, `ss`, `sip`, ...), so these
+/// adapters execute the normal Helix command and immediately feed that pending
+/// callback the exact key Helix itself expects.
+///
+/// This is an adapter rather than a second text-object implementation: all
+/// Tree-sitter queries, pair matching, counts, and selection behavior remain in
+/// Helix.
+fn select_helix_textobject(cx: &mut Context, around: bool, helix_object_key: char) {
+    let command = if around {
+        MappableCommand::select_textobject_around
+    } else {
+        MappableCommand::select_textobject_inner
+    };
+
+    command.execute(cx);
+
+    // Rust learning note: `Option::take()` replaces the field with `None` and
+    // gives us ownership of the callback. That matters because `FnOnce` may be
+    // called exactly once, and calling it also needs `&mut Context` again.
+    let Some((callback, _kind)) = cx.on_next_key_callback.take() else {
+        cx.editor
+            .set_error("Enzyme expected Helix to request a text-object key");
+        return;
+    };
+
+    // KeyEvent implements FromStr, so parsing a one-character string gives the
+    // same unmodified key event Helix would have received from the keyboard.
+    let key = helix_object_key.to_string();
+    let Ok(event) = key.parse() else {
+        cx.editor
+            .set_error("Enzyme could not construct a text-object key");
+        return;
+    };
+
+    callback(cx, event);
+}
+
+fn enzyme_select_line(cx: &mut Context) {
+    MappableCommand::extend_line.execute(cx);
+}
+
+fn enzyme_select_word(cx: &mut Context) {
+    select_helix_textobject(cx, true, 'w');
+}
+
+fn enzyme_select_function(cx: &mut Context) {
+    select_helix_textobject(cx, true, 'f');
+}
+
+fn enzyme_select_class(cx: &mut Context) {
+    // Helix names the class/type text object `t` (type definition).
+    select_helix_textobject(cx, true, 't');
+}
+
+fn enzyme_select_section(cx: &mut Context) {
+    // Enzyme calls prose/blank-line-delimited paragraphs "sections"; Helix's
+    // underlying text-object key for that concept is `p`.
+    select_helix_textobject(cx, true, 'p');
+}
+
+fn enzyme_select_block(cx: &mut Context) {
+    // `m` is Helix's closest surrounding pair text object.
+    select_helix_textobject(cx, true, 'm');
+}
+
+fn enzyme_select_inside_pair(cx: &mut Context) {
+    select_helix_textobject(cx, false, 'm');
+}
+
+fn enzyme_select_outside_pair(cx: &mut Context) {
+    select_helix_textobject(cx, true, 'm');
+}
+
+fn enzyme_select_document(cx: &mut Context) {
+    MappableCommand::select_all.execute(cx);
 }
 
 // Rust learning note: this is an inherent `impl` block. It adds associated
@@ -142,5 +223,59 @@ impl MappableCommand {
         name: "enzyme_goto_previous_section",
         fun: enzyme_goto_previous_section,
         doc: "Go to previous section",
+    };
+
+    pub const enzyme_select_line: Self = Self::Static {
+        name: "enzyme_select_line",
+        fun: enzyme_select_line,
+        doc: "Select current line",
+    };
+
+    pub const enzyme_select_word: Self = Self::Static {
+        name: "enzyme_select_word",
+        fun: enzyme_select_word,
+        doc: "Select current word",
+    };
+
+    pub const enzyme_select_function: Self = Self::Static {
+        name: "enzyme_select_function",
+        fun: enzyme_select_function,
+        doc: "Select current function",
+    };
+
+    pub const enzyme_select_class: Self = Self::Static {
+        name: "enzyme_select_class",
+        fun: enzyme_select_class,
+        doc: "Select current class/type",
+    };
+
+    pub const enzyme_select_section: Self = Self::Static {
+        name: "enzyme_select_section",
+        fun: enzyme_select_section,
+        doc: "Select current section",
+    };
+
+    pub const enzyme_select_block: Self = Self::Static {
+        name: "enzyme_select_block",
+        fun: enzyme_select_block,
+        doc: "Select current block/pair",
+    };
+
+    pub const enzyme_select_inside_pair: Self = Self::Static {
+        name: "enzyme_select_inside_pair",
+        fun: enzyme_select_inside_pair,
+        doc: "Select inside closest pair",
+    };
+
+    pub const enzyme_select_outside_pair: Self = Self::Static {
+        name: "enzyme_select_outside_pair",
+        fun: enzyme_select_outside_pair,
+        doc: "Select outside/around closest pair",
+    };
+
+    pub const enzyme_select_document: Self = Self::Static {
+        name: "enzyme_select_document",
+        fun: enzyme_select_document,
+        doc: "Select whole document",
     };
 }
