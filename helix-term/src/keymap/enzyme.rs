@@ -45,16 +45,20 @@ fn navigate_without_selecting(cx: &mut Context, helix_command: MappableCommand) 
     // borrowing rules.
     let (view, doc) = current!(cx.editor);
 
-    // Helix has already performed the motion. At this point we alter only the
-    // shape of its resulting selection: `Range::point` represents a cursor.
+    // A Helix Range has an `anchor` and a `head`. The head is the active end --
+    // in other words, the destination Helix moved *to*. `from()`/`to()` instead
+    // describe lexical ordering and discard direction. That distinction matters
+    // for directional motions: a forward and backward motion can select the same
+    // span while having opposite heads.
     //
-    // NOTE: `from()` is deliberately isolated here. If a Helix motion's true
-    // navigation endpoint is not its lexical range start, we can improve this
-    // one adapter without teaching Enzyme how that motion itself works.
+    // Enzyme wants Helix to choose the destination, but does not want Normal
+    // mode to retain the implicit selection. Collapsing to `range.head` therefore
+    // preserves the actual Helix motion endpoint without reimplementing the
+    // motion or guessing which textual edge should win.
     let selection = doc
         .selection(view.id)
         .clone()
-        .transform(|range| Range::point(range.from()));
+        .transform(|range| Range::point(range.head));
 
     doc.set_selection(view.id, selection);
 }
