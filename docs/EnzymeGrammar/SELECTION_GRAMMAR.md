@@ -141,47 +141,23 @@ v    enter Select/Visual mode
 
 Select/Visual mode supplies the selection intent implicitly. Therefore Enzyme does **not** add a redundant `se... = select → extend...` family.
 
-Compatible motions retain their normal spelling but extend the active selection:
-
-```text
-Normal mode                 Select/Visual mode
------------                 ------------------
-h    move left              h    extend left
-j    move down              j    extend down
-k    move up                k    extend up
-l    move right             l    extend right
-w    word motion            w    extend by word
-
-gsl  go start line          gsl  extend to start line
-gel  go end line            gel  extend to end line
-
-gsf  go start prev func     gsf  extend toward start prev func
-gSf  go start this func     gSf  extend toward start this func
-gsF  go start next func     gsF  extend toward start next func
-```
-
-The general rule is:
+Compatible motions retain their normal spelling but extend the active selection. The general rule is:
 
 > **In Select/Visual mode, a compatible movement/navigation sentence extends the selection to the destination described by that sentence.**
 
 The grammar is therefore learned once. Primer should not maintain a second parallel set of extension mnemonics when mode context already supplies the verb.
 
-### Compatibility boundary
+Not every Navigation command can sensibly extend a contiguous selection. Structural and local motions generally can; cross-document semantic jumps may not. Primer should preserve useful Helix behavior where possible, but must not pretend a cross-buffer range exists when the underlying editor cannot represent one.
 
-Not every Navigation command can sensibly extend a contiguous selection. Structural and local motions generally can; cross-document semantic jumps may not.
-
-Examples such as `gd` (definition), `gi` (implementation), or `gt` (type definition) must be audited against Helix behavior and Primer's selection model before implementation. Primer should preserve useful Helix behavior where possible, but must not pretend a cross-buffer range exists when the underlying editor cannot represent one.
-
-`Esc` exits Select/Visual mode toward the safe normal state according to Primer's general mode rules. It does not rewind all movement performed while Select mode was active.
+`Esc` exits Select/Visual mode toward the safe normal state. It does not rewind all movement performed while Select mode was active.
 
 ## Multiple-selection grammar
 
-Multiple selections remain first-class Helix selections. Enzyme supplies a predictable language over the existing machinery.
+Multiple selections remain first-class Helix selections. Enzyme supplies predictable grammar for common selection-building operations where doing so materially improves normal editing.
 
 ```text
 s a ...    select → add ...
 s r ...    select → remove ...
-s p ...    select → primary ...
 s k ...    select → keep/filter ...
 s x ...    select → split ...
 ```
@@ -196,16 +172,6 @@ saa    select → add → all matching occurrences
 
 The match source is the current selection text/range, not necessarily a lexical word.
 
-Typical workflows:
-
-```text
-sw → san → san → m
-select word → add next → add next → modify all
-
-sw → saa → m
-select word → add all matching occurrences → modify all
-```
-
 ### Remove selections
 
 ```text
@@ -214,44 +180,37 @@ srN    select → remove → previous selection
 sra    select → remove → all additional/secondary selections
 ```
 
-`sra` leaves the primary selection intact. The helper should describe it as "remove all additional selections."
+`sra` leaves the primary selection intact.
 
-### Primary selection
-
-```text
-spn    select → primary → next
-spN    select → primary → previous
-spo    select → primary → only
-```
-
-`spn/spN` rotate which existing selection is primary. `spo` keeps only the primary selection.
-
-**Grammar note:** direct `sp` now means **select pair**. The longer `sp...` primary-selection branch therefore has a prefix collision and must be revisited before implementation. Do not silently overload `sp` as both a completed pair command and a primary-selection namespace.
-
-### Keep/filter selections
+### Keep/filter and split
 
 ```text
 skm    select → keep → matching...
 srm    select → remove → matching...
+
+sx...  select → split ...
+sxl    split selection into lines
+sxm    split selection by matches...
 ```
 
-Both prompt for a pattern/filter.
+## Advanced selection-set controls
 
-### Split selections
+Enzyme lowers the learning curve; it does not attempt to eliminate learning. Core navigation and selection should be predictable from a small vocabulary. Specialized controls may still require learning and reference, just as advanced features in a conventional editor do.
 
-`x` means split in this selection-set branch. The weaker mnemonic is intentional because `ss = select section` is the stronger core-object command.
+Primer therefore intentionally preserves these concise Helix controls rather than inventing a longer Enzyme namespace for them:
 
 ```text
-sx...    select → split ...
-sxl      split selection into lines
-sxm      split selection by matches...
+(       rotate selections backward / change primary backward
+)       rotate selections forward / change primary forward
+,       keep only the primary selection
+Alt+,   remove the primary selection
 ```
 
-## Advanced Helix selection operations
+These are niche selection-set management operations, not part of the core object-selection/navigation philosophy. Their existence does not justify complicating the everyday `s` grammar.
 
-Primer's goal is parity with useful existing Helix motion/selection capabilities, not merely parity with the commands already remembered during Enzyme design. Alignment, selection-direction flipping, rotating selection contents, syntax-tree selection growth/shrinkage, and other Helix primitives must be included in the upcoming parity audit.
+The same standard applies during the broader parity audit: **do not remap an advanced Helix capability merely because Enzyme can invent a grammatical spelling for it. Change it when doing so materially lowers the learning curve or resolves a real inconsistency.**
 
-A capability may keep a sensible existing convention or receive Enzyme grammar according to the established rules. It should not be silently dropped because it is uncommon.
+Other advanced Helix selection operations—alignment, selection-direction flipping, rotating selection contents, syntax-tree growth/shrinkage, sibling/parent/child operations, and similar tools—must remain reachable. They may retain sensible Helix bindings unless dogfooding demonstrates a meaningful reason to promote them into Enzyme grammar.
 
 ## Actions after selection
 
@@ -305,30 +264,27 @@ Select/Visual mode should instead surface compatible motions/navigation because 
 9. `sd` is select document/select all.
 10. Backspace means cancel the current transient Enzyme operation and restore its pre-operation state when available; Esc remains mode exit/cancel, and `u` remains editing undo.
 11. `n/N` retain next/previous meaning inside selection-set operations.
-12. Contextual letter reuse is acceptable when grammatical position makes the branch clear, but a completed command may not simultaneously be an ambiguous namespace (`sp` pair vs `sp...` primary currently needs redesign).
-13. Prefer the strongest mnemonic for common/core operations; rarer advanced families may accept a weaker documented mnemonic when necessary (`ss = section`, `sx = split`).
-14. Primer must account for existing Helix motion/selection capabilities through an explicit parity audit before Enzyme v1 is declared complete.
+12. Prefer the strongest mnemonic for common/core operations; rarer advanced controls may retain concise established bindings.
+13. Primer must account for existing Helix motion/selection capabilities through an explicit parity audit before Enzyme v1 is declared complete.
+14. Enzyme lowers the learning curve rather than eliminating learning. Advanced operations may require learning/reference even when the core grammar is highly predictable.
 15. Do not invent bindings merely to make the grammar exhaustive; preserve sensible conventions when they already satisfy Primer's philosophy.
 
-## Selection v1 remaining decisions
+## Selection v1 implementation checklist
 
 `se...` is intentionally removed. `v` plus compatible motion is the extension model.
 
 `so...` is intentionally removed. Selecting an object directly is the whole/around form; `si...` is the inside modifier.
 
+The old proposed `spn/spN/spo` primary-selection namespace is intentionally removed. `sp` means select pair; Primer preserves Helix's concise `(`/`)`/`,`/`Alt+,` controls for primary-selection management.
+
 Before Enzyme v1 is frozen, Primer still needs:
 
-- a new spelling for the primary-selection operations previously proposed under `sp...`, because `sp` now means select pair;
 - implementation verification for `sp` / `sip` using true matching-pair semantics;
 - implementation verification for `sb` / `sib` using Tree-sitter-defined block semantics;
 - Backspace transient-selection cancellation/restoration;
-- a **Helix parity audit** covering every normal movement/motion and corresponding Select/Visual extension behavior;
-- syntax-tree selection growth/shrink and sibling/parent/child traversal;
-- character find/till and repeat-last-motion behavior;
-- page/half-page and viewport-relative motions;
-- jumplist/history motions and their relationship to `gnh/gNh`;
-- advanced multiple-selection operations such as align, flip direction, and rotate contents;
-- regex selection/filter/split behavior and its mapping to `sxm`, `skm`, and `srm`;
-- commands whose Helix behavior cannot sensibly map to a contiguous selection across buffers/documents.
+- Select/Visual-mode navigation parity for compatible Enzyme motions;
+- a Helix parity audit to ensure advanced capabilities remain reachable without automatically remapping them;
+- verification of regex selection/filter/split behavior for the common Enzyme multiple-selection grammar;
+- verification of commands whose Helix behavior cannot sensibly map to a contiguous selection across buffers/documents.
 
-After that audit, only actual uncovered capabilities should receive new grammar decisions.
+After that audit, only actual uncovered capabilities that materially benefit from Enzyme grammar should receive new grammar decisions.
