@@ -3,9 +3,82 @@
 //! Helix owns language/text-object semantics wherever possible. Enzyme owns the
 //! predictable grammar layered over those primitives.
 
-use helix_core::{match_brackets, textobject, Range};
-use helix_view::document::Mode;
+use std::cell::RefCell;
+
+use helix_core::{match_brackets, textobject, Range, Selection};
+use helix_view::{document::Mode, DocumentId, ViewId};
 use crate::commands::{Context, MappableCommand};
+
+/// A deliberately small one-step history for Enzyme's "oops, never mind" action.
+///
+/// This is separate from Helix's edit undo history: Backspace may restore a
+/// transient selection, but it must never undo document contents.
+#[derive(Clone)]
+struct TransientSelection {
+    document_id: DocumentId,
+    view_id: ViewId,
+    document_version: i32,
+    before: Selection,
+    after: Selection,
+}
+
+thread_local! {
+    static TRANSIENT_SELECTION: RefCell<Option<TransientSelection>> = const { RefCell::new(None) };
+}
+
+/// Run one Enzyme object-selection command and remember exactly what it changed.
+///
+/// Rust note: the short scopes around `current!` matter because they release the
+/// mutable editor borrow before `action(cx)` needs to borrow the editor again.
+fn remember_transient_selection(cx: &mut Context, action: impl FnOnce(&mut Context)) {
+    let (document_id, view_id, document_version, before) = {
+        let (view, doc) = current!(cx.editor);
+        (doc.id(), view.id, doc.version(), doc.selection(view.id).clone())
+    };
+
+    action(cx);
+
+    let after = {
+        let (view, doc) = current!(cx.editor);
+        if doc.id() != document_id || view.id != view_id || doc.version() != document_version {
+            TRANSIENT_SELECTION.with(|saved| *saved.borrow_mut() = None);
+            return;
+        }
+        doc.selection(view.id).clone()
+    };
+
+    TRANSIENT_SELECTION.with(|saved| {
+        *saved.borrow_mut() = Some(TransientSelection {
+            document_id,
+            view_id,
+            document_version,
+            before,
+            after,
+        });
+    });
+}
+
+/// Cancel only the still-current transient Enzyme selection.
+///
+/// We validate the document version *and* the resulting selection before
+/// restoring anything. That makes Backspace a safe selection cancel rather than
+/// a second undo command: after an edit or later cursor/selection movement, the
+/// saved transient state is stale and is simply discarded.
+fn enzyme_cancel_transient_selection(cx: &mut Context) {
+    let saved = TRANSIENT_SELECTION.with(|slot| slot.borrow_mut().take());
+    let Some(saved) = saved else { return; };
+
+    let (view, doc) = current!(cx.editor);
+    if doc.id() != saved.document_id
+        || view.id != saved.view_id
+        || doc.version() != saved.document_version
+        || doc.selection(view.id) != &saved.after
+    {
+        return;
+    }
+
+    doc.set_selection(view.id, saved.before);
+}
 
 fn navigate_without_selecting(cx: &mut Context, command: MappableCommand, collapse: fn(Range) -> usize) {
     command.execute(cx);
@@ -85,25 +158,44 @@ fn select_pair(cx: &mut Context, object: textobject::TextObject) {
     doc.set_selection(view.id, selection);
 }
 
-fn enzyme_select_line(cx: &mut Context) { MappableCommand::extend_line.execute(cx); }
-fn enzyme_select_word(cx: &mut Context) { select_helix_textobject(cx, true, 'w'); }
-fn enzyme_select_function(cx: &mut Context) { select_helix_textobject(cx, true, 'f'); }
-fn enzyme_select_class(cx: &mut Context) { select_helix_textobject(cx, true, 't'); }
-fn enzyme_select_section(cx: &mut Context) { select_helix_textobject(cx, true, 'p'); }
-
-fn enzyme_select_block(cx: &mut Context) {
-    // Compatibility only: upstream Helix has no language-neutral `block`
-    // text-object capture. Primer must replace this pair fallback with a true
-    // Tree-sitter-defined block object rather than defining block as braces.
-    select_helix_textobject(cx, true, 'm');
+fn enzyme_select_line(cx: &mut Context) {
+    remember_transient_selection(cx, |cx| MappableCommand::extend_line.execute(cx));
+}
+fn enzyme_select_word(cx: &mut Context) {
+    remember_transient_selection(cx, |cx| select_helix_textobject(cx, true, 'w'));
+}
+fn enzyme_select_function(cx: &mut Context) {
+    remember_transient_selection(cx, |cx| select_helix_textobject(cx, true, 'f'));
+}
+fn enzyme_select_class(cx: &mut Context) {
+    remember_transient_selection(cx, |cx| select_helix_textobject(cx, true, 't'));
+}
+fn enzyme_select_section(cx: &mut Context) {
+    remember_transient_selection(cx, |cx| select_helix_textobject(cx, true, 'p'));
 }
 
-fn enzyme_select_pair(cx: &mut Context) { select_pair(cx, textobject::TextObject::Around); }
-fn enzyme_select_inside_pair(cx: &mut Context) { select_pair(cx, textobject::TextObject::Inside); }
-fn enzyme_select_document(cx: &mut Context) { MappableCommand::select_all.execute(cx); }
+fn enzyme_select_block(cx: &mut Context) {
+    remember_transient_selection(cx, |cx| {
+        // Compatibility only: upstream Helix has no language-neutral `block`
+        // text-object capture. Primer must replace this pair fallback with a true
+        // Tree-sitter-defined block object rather than defining block as braces.
+        select_helix_textobject(cx, true, 'm');
+    });
+}
+
+fn enzyme_select_pair(cx: &mut Context) {
+    remember_transient_selection(cx, |cx| select_pair(cx, textobject::TextObject::Around));
+}
+fn enzyme_select_inside_pair(cx: &mut Context) {
+    remember_transient_selection(cx, |cx| select_pair(cx, textobject::TextObject::Inside));
+}
+fn enzyme_select_document(cx: &mut Context) {
+    remember_transient_selection(cx, |cx| MappableCommand::select_all.execute(cx));
+}
 
 #[allow(non_upper_case_globals)]
 impl MappableCommand {
+    pub const enzyme_cancel_transient_selection: Self = Self::Static { name: "enzyme_cancel_transient_selection", fun: enzyme_cancel_transient_selection, doc: "Cancel current transient Enzyme selection" };
     pub const enzyme_goto_next_function: Self = Self::Static { name: "enzyme_goto_next_function", fun: enzyme_goto_next_function, doc: "Go to next function" };
     pub const enzyme_goto_previous_function: Self = Self::Static { name: "enzyme_goto_previous_function", fun: enzyme_goto_previous_function, doc: "Go to previous function" };
     pub const enzyme_goto_next_class: Self = Self::Static { name: "enzyme_goto_next_class", fun: enzyme_goto_next_class, doc: "Go to next class/type" };
