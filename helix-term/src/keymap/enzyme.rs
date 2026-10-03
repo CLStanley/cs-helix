@@ -3,7 +3,7 @@
 //! Helix owns language/text-object semantics wherever possible. Enzyme owns the
 //! predictable grammar layered over those primitives.
 
-use helix_core::{textobject, Range};
+use helix_core::{match_brackets, textobject, Range};
 use helix_view::document::Mode;
 use crate::commands::{Context, MappableCommand};
 
@@ -51,13 +51,30 @@ fn select_helix_textobject(cx: &mut Context, around: bool, object_key: char) {
     callback(cx, event);
 }
 
-/// Install Helix-core's closest matching-pair range directly. Pair recognition
-/// remains a Helix responsibility; Enzyme only chooses whole versus inside.
+/// Resolve the pair using Helix's own bracket semantics.
+///
+/// Rust note: `if let Some(...)` lets us use the matched value only when the
+/// lookup succeeds. When the cursor is directly on a delimiter, we prefer that
+/// exact pair. Otherwise we fall back to Helix's surrounding-pair text object.
 fn select_pair(cx: &mut Context, object: textobject::TextObject) {
     let (view, doc) = current!(cx.editor);
     let text = doc.text().slice(..);
     let syntax = doc.syntax();
     let selection = doc.selection(view.id).clone().transform(|range| {
+        let cursor = range.cursor(text);
+
+        if let Some(syntax) = syntax {
+            if let Some(matching) = match_brackets::find_matching_bracket(syntax, text, cursor) {
+                let start = cursor.min(matching);
+                let end = cursor.max(matching);
+
+                return match object {
+                    textobject::TextObject::Around => Range::new(start, end + 1),
+                    textobject::TextObject::Inside => Range::new(start + 1, end),
+                };
+            }
+        }
+
         textobject::textobject_pair_surround_closest(syntax, text, range, object, 1)
     });
     doc.set_selection(view.id, selection);
