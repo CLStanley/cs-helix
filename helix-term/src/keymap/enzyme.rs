@@ -37,9 +37,6 @@ fn enzyme_goto_previous_section(cx: &mut Context) {
     navigate_without_selecting(cx, MappableCommand::goto_prev_paragraph, motion_head);
 }
 
-/// Reuse one of Helix's interactive text objects without asking the user for a
-/// second object key. `Option::take` moves the one-shot callback out so Rust
-/// allows us to invoke it with the mutable command context.
 fn select_helix_textobject(cx: &mut Context, around: bool, object_key: char) {
     let command = if around { MappableCommand::select_textobject_around } else { MappableCommand::select_textobject_inner };
     command.execute(cx);
@@ -54,13 +51,8 @@ fn select_helix_textobject(cx: &mut Context, around: bool, object_key: char) {
     callback(cx, event);
 }
 
-/// Select Helix's closest matching pair directly.
-///
-/// The generic text-object command passes pair ranges through Helix's motion
-/// machinery, which collapsed the result during Primer's Normal-mode testing.
-/// `sp`/`sip` are explicit selection operations, so Enzyme installs the range
-/// returned by Helix-core's pair matcher directly. Pair recognition remains a
-/// Helix responsibility; Enzyme only chooses Around versus Inside.
+/// Install Helix-core's closest matching-pair range directly. Pair recognition
+/// remains a Helix responsibility; Enzyme only chooses whole versus inside.
 fn select_pair(cx: &mut Context, object: textobject::TextObject) {
     let (view, doc) = current!(cx.editor);
     let text = doc.text().slice(..);
@@ -104,9 +96,5 @@ impl MappableCommand {
     pub const enzyme_select_block: Self = Self::Static { name: "enzyme_select_block", fun: enzyme_select_block, doc: "Select current structural block" };
     pub const enzyme_select_pair: Self = Self::Static { name: "enzyme_select_pair", fun: enzyme_select_pair, doc: "Select closest matching pair" };
     pub const enzyme_select_inside_pair: Self = Self::Static { name: "enzyme_select_inside_pair", fun: enzyme_select_inside_pair, doc: "Select inside closest matching pair" };
-    // Temporary alias so the branch remains buildable until default.rs is moved
-    // from the obsolete `sop` spelling to `sp`. It deliberately performs the
-    // same whole-pair operation that `sp` will own.
-    pub const enzyme_select_outside_pair: Self = Self::Static { name: "enzyme_select_outside_pair", fun: enzyme_select_pair, doc: "Select closest matching pair" };
     pub const enzyme_select_document: Self = Self::Static { name: "enzyme_select_document", fun: enzyme_select_document, doc: "Select whole document" };
 }
